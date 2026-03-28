@@ -1,4 +1,4 @@
-module xgo
+module github.com/organic/xgo
 
 go 1.23
 

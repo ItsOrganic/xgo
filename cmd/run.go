@@ -10,12 +10,13 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/organic/xgo/internal/config"
+	"github.com/organic/xgo/internal/debouncer"
+	"github.com/organic/xgo/internal/logger"
+	"github.com/organic/xgo/internal/runner"
+	"github.com/organic/xgo/internal/watcher"
+
 	"github.com/spf13/cobra"
-	"xgo/internal/config"
-	"xgo/internal/debouncer"
-	"xgo/internal/logger"
-	"xgo/internal/runner"
-	"xgo/internal/watcher"
 )
 
 func newRunCmd(opts *rootOptions) *cobra.Command {

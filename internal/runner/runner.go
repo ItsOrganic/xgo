@@ -16,8 +16,8 @@ import (
 	"syscall"
 	"time"
 
-	"xgo/internal/debouncer"
-	"xgo/internal/logger"
+	"github.com/organic/xgo/internal/debouncer"
+	"github.com/organic/xgo/internal/logger"
 )
 
 // CommandSpec describes a command started by the runner.

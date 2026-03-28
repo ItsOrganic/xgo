@@ -6,8 +6,9 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/organic/xgo/internal/runner"
+
 	"gopkg.in/yaml.v3"
-	"xgo/internal/runner"
 )
 
 type runtimeState struct {
