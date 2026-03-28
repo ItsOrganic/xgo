@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/organic/xgo/internal/watcher"
+	"github.com/ItsOrganic/xgo/internal/watcher"
 )
 
 // BuildSignal indicates a confirmed source change that should trigger build/restart.

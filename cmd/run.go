@@ -10,11 +10,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/organic/xgo/internal/config"
-	"github.com/organic/xgo/internal/debouncer"
-	"github.com/organic/xgo/internal/logger"
-	"github.com/organic/xgo/internal/runner"
-	"github.com/organic/xgo/internal/watcher"
+	"github.com/ItsOrganic/xgo/internal/config"
+	"github.com/ItsOrganic/xgo/internal/debouncer"
+	"github.com/ItsOrganic/xgo/internal/logger"
+	"github.com/ItsOrganic/xgo/internal/runner"
+	"github.com/ItsOrganic/xgo/internal/watcher"
 
 	"github.com/spf13/cobra"
 )

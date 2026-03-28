@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"syscall"
 
-	"github.com/organic/xgo/cmd"
+	"github.com/ItsOrganic/xgo/cmd"
 )
 
 func main() {

@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/organic/xgo/internal/runner"
+	"github.com/ItsOrganic/xgo/internal/runner"
 
 	"gopkg.in/yaml.v3"
 )
