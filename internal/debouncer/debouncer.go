@@ -113,6 +113,16 @@ func (d *Debouncer) Start(ctx context.Context, in <-chan watcher.FileEvent) <-ch
 				select {
 				case out <- signal:
 				default:
+					// Buffer full: drop the stale pending signal and replace it
+					// with this newer one, so the latest edit is never lost.
+					select {
+					case <-out:
+					default:
+					}
+					select {
+					case out <- signal:
+					default:
+					}
 				}
 				queue = queue[:0]
 				timer = nil

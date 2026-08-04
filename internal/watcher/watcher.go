@@ -91,8 +91,14 @@ func (w *Watcher) Start(ctx context.Context) (<-chan FileEvent, <-chan error) {
 	events := make(chan FileEvent, 256)
 	errs := make(chan error, 8)
 
-	if err := w.addInitialDirs(); err != nil {
+	if err := w.addInitialDirs(errs); err != nil {
 		errs <- err
+	}
+	if len(w.WatchedDirs()) == 0 {
+		select {
+		case errs <- fmt.Errorf("no directories are being watched (check watch/exclude patterns and filesystem permissions) - file changes will NOT trigger rebuilds"):
+		default:
+		}
 	}
 
 	go func() {
@@ -117,7 +123,7 @@ func (w *Watcher) Start(ctx context.Context) (<-chan FileEvent, <-chan error) {
 					return
 				}
 				if evt.Op&fsnotify.Create == fsnotify.Create {
-					w.tryAddDir(evt.Name)
+					w.tryAddDir(evt.Name, errs)
 				}
 				if !w.shouldEmit(evt.Name, evt.Op) {
 					continue
@@ -163,7 +169,7 @@ func (w *Watcher) loadGitignore() error {
 	return nil
 }
 
-func (w *Watcher) addInitialDirs() error {
+func (w *Watcher) addInitialDirs(errs chan<- error) error {
 	for _, dir := range w.dirs {
 		root := dir
 		if !filepath.IsAbs(root) {
@@ -171,6 +177,10 @@ func (w *Watcher) addInitialDirs() error {
 		}
 		err := filepath.WalkDir(root, func(path string, d os.DirEntry, walkErr error) error {
 			if walkErr != nil {
+				select {
+				case errs <- fmt.Errorf("walk %s: %w", path, walkErr):
+				default:
+				}
 				return nil
 			}
 			if !d.IsDir() {
@@ -180,6 +190,10 @@ func (w *Watcher) addInitialDirs() error {
 				return filepath.SkipDir
 			}
 			if err := w.addWatch(path); err != nil {
+				select {
+				case errs <- fmt.Errorf("watch %s: %w", path, err):
+				default:
+				}
 				return nil
 			}
 			return nil
@@ -205,7 +219,7 @@ func (w *Watcher) addWatch(dir string) error {
 	return nil
 }
 
-func (w *Watcher) tryAddDir(path string) {
+func (w *Watcher) tryAddDir(path string, errs chan<- error) {
 	info, err := os.Stat(path)
 	if err != nil || !info.IsDir() {
 		return
@@ -213,7 +227,12 @@ func (w *Watcher) tryAddDir(path string) {
 	if w.isDirExcluded(path) {
 		return
 	}
-	_ = w.addWatch(path)
+	if err := w.addWatch(path); err != nil {
+		select {
+		case errs <- fmt.Errorf("watch %s: %w", path, err):
+		default:
+		}
+	}
 }
 
 func (w *Watcher) shouldEmit(path string, op fsnotify.Op) bool {
@@ -227,7 +246,11 @@ func (w *Watcher) shouldEmit(path string, op fsnotify.Op) bool {
 }
 
 func (w *Watcher) isDirExcluded(path string) bool {
-	clean := filepath.ToSlash(path) + "/"
+	rel, err := filepath.Rel(w.workingDir, path)
+	if err != nil {
+		rel = path
+	}
+	clean := filepath.ToSlash(rel) + "/"
 	for _, p := range w.excludes {
 		if strings.HasSuffix(p, "/") {
 			if strings.Contains(clean, trimLeadingDotSlash(filepath.ToSlash(p))) {

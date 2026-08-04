@@ -107,8 +107,6 @@ func newRunCmd(opts *rootOptions) *cobra.Command {
 			if inferredBuildTarget != "" {
 				log.Infof("inferred build target: %s", inferredBuildTarget)
 			}
-			log.Infof("watching %d dirs", len(cfg.Watch.Dirs))
-
 			w, err := watcher.New(watcher.Options{
 				Dirs:         cfg.Watch.Dirs,
 				Includes:     cfg.Watch.Include,
@@ -125,6 +123,11 @@ func newRunCmd(opts *rootOptions) *cobra.Command {
 			defer cancel()
 
 			events, watchErrs := w.Start(ctx)
+			if n := len(w.WatchedDirs()); n == 0 {
+				log.Errorf("watching 0 dirs - no file changes will trigger a rebuild; check watch/exclude patterns and permissions")
+			} else {
+				log.Infof("watching %d dirs", n)
+			}
 			rawEvents := make(chan watcher.FileEvent, 256)
 			go func() {
 				defer close(rawEvents)

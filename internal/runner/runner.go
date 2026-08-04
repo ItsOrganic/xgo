@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
+	"sync/atomic"
 	"time"
 
 	"github.com/ItsOrganic/xgo/internal/debouncer"
@@ -54,10 +54,13 @@ type StatusSnapshot struct {
 }
 
 type processInfo struct {
-	spec  CommandSpec
-	cmd   *exec.Cmd
-	pid   int
-	group int
+	spec     CommandSpec
+	cmd      *exec.Cmd
+	pid      int
+	group    int
+	done     chan struct{}
+	waitErr  error
+	stopping atomic.Bool
 }
 
 // Runner manages build/restart lifecycle.
@@ -218,7 +221,7 @@ func (r *Runner) stopAll(ctx context.Context) error {
 
 	var allErr error
 	for _, p := range procs {
-		if err := terminateProcess(ctx, p.cmd.Process, p.group, r.cfg.SignalTimeout); err != nil {
+		if err := terminateProcess(ctx, p, r.cfg.SignalTimeout); err != nil {
 			allErr = errors.Join(allErr, fmt.Errorf("stop %s: %w", p.spec.Name, err))
 		}
 	}
@@ -264,17 +267,42 @@ func (r *Runner) startCmd(ctx context.Context, spec CommandSpec) (*processInfo, 
 		return nil, fmt.Errorf("start process: %w", err)
 	}
 
-	proc := &processInfo{spec: spec, cmd: command, pid: command.Process.Pid, group: processGroupID(command)}
-
-	if spec.Name != r.cfg.Main.Name {
-		go r.forwardPrefixed(spec.Name, stdout)
-		go r.forwardPrefixed(spec.Name, stderr)
-	}
+	proc := &processInfo{spec: spec, cmd: command, pid: command.Process.Pid, group: processGroupID(command), done: make(chan struct{})}
 
 	go func() {
-		_ = command.Wait()
+		if spec.Name != r.cfg.Main.Name {
+			var wg sync.WaitGroup
+			wg.Add(2)
+			go func() {
+				defer wg.Done()
+				r.forwardPrefixed(spec.Name, stdout)
+			}()
+			go func() {
+				defer wg.Done()
+				r.forwardPrefixed(spec.Name, stderr)
+			}()
+			wg.Wait()
+		}
+		proc.waitErr = command.Wait()
+		close(proc.done)
+		if !proc.stopping.Load() {
+			r.handleUnexpectedExit(proc)
+		}
 	}()
 	return proc, nil
+}
+
+func (r *Runner) handleUnexpectedExit(proc *processInfo) {
+	r.mu.Lock()
+	if cur, ok := r.procs[proc.spec.Name]; ok && cur.pid == proc.pid {
+		delete(r.procs, proc.spec.Name)
+	}
+	r.mu.Unlock()
+	if proc.waitErr != nil {
+		r.cfg.Logger.Warnf("%s exited unexpectedly (pid=%d): %v", proc.spec.Name, proc.pid, proc.waitErr)
+	} else {
+		r.cfg.Logger.Warnf("%s exited unexpectedly (pid=%d)", proc.spec.Name, proc.pid)
+	}
 }
 
 func (r *Runner) forwardPrefixed(name string, rd io.Reader) {
@@ -354,32 +382,27 @@ func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'"
 }
 
-func terminateProcess(ctx context.Context, proc *os.Process, groupID int, timeout time.Duration) error {
-	if proc == nil {
+func terminateProcess(ctx context.Context, p *processInfo, timeout time.Duration) error {
+	if p == nil || p.cmd.Process == nil {
 		return nil
 	}
-	if err := sendTerminate(proc, groupID); err != nil {
+	p.stopping.Store(true)
+	if err := sendTerminate(p.cmd.Process, p.group); err != nil {
 		return err
 	}
-	done := make(chan error, 1)
-	go func() {
-		_, err := proc.Wait()
-		done <- err
-	}()
 
 	select {
-	case err := <-done:
-		if err != nil && !errors.Is(err, syscall.ECHILD) {
-			return err
-		}
+	case <-p.done:
+		// The process exited in response to our own signal; whatever exit
+		// status/signal it reports is expected, not a failure to surface.
 		return nil
 	case <-time.After(timeout):
-		if err := forceKill(proc, groupID); err != nil {
+		if err := forceKill(p.cmd.Process, p.group); err != nil {
 			return err
 		}
 		return nil
 	case <-ctx.Done():
-		if err := forceKill(proc, groupID); err != nil {
+		if err := forceKill(p.cmd.Process, p.group); err != nil {
 			return err
 		}
 		return ctx.Err()
