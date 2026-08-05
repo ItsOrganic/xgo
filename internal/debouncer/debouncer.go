@@ -8,9 +8,9 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 	"time"
 
+	"github.com/ItsOrganic/xgo/internal/pathmatch"
 	"github.com/ItsOrganic/xgo/internal/watcher"
 )
 
@@ -27,17 +27,30 @@ type Options struct {
 	WatchDirs  []string
 	Includes   []string
 	Excludes   []string
+	Gitignore  []string
 	WorkingDir string
+}
+
+type stamp struct {
+	size  int64
+	mtime int64
 }
 
 // Debouncer coalesces watcher events and emits build signals.
 type Debouncer struct {
 	delay           time.Duration
 	watchDirs       []string
-	includes        []string
-	excludes        []string
 	workingDir      string
+	matcher         *pathmatch.Matcher
 	lastFingerprint string
+
+	// files is an incrementally-maintained index of every matched file's
+	// (size, mtime). It's seeded once by a full walk in PrimeFingerprint,
+	// then updated only for paths that a FileEvent actually reports as
+	// changed - avoiding a full filesystem re-walk + re-stat of every
+	// watched file on every single debounce tick, which is what the
+	// original implementation did.
+	files map[string]stamp
 }
 
 // New creates a debouncer.
@@ -45,18 +58,20 @@ func New(opts Options) *Debouncer {
 	if opts.Delay <= 0 {
 		opts.Delay = 50 * time.Millisecond
 	}
-	if len(opts.WatchDirs) == 0 {
-		opts.WatchDirs = []string{"."}
+	watchDirs := opts.WatchDirs
+	if len(watchDirs) == 0 {
+		watchDirs = []string{"."}
 	}
-	if len(opts.Includes) == 0 {
-		opts.Includes = []string{"*.go"}
+	includes := opts.Includes
+	if len(includes) == 0 {
+		includes = []string{"*.go"}
 	}
 	return &Debouncer{
 		delay:      opts.Delay,
-		watchDirs:  opts.WatchDirs,
-		includes:   opts.Includes,
-		excludes:   opts.Excludes,
+		watchDirs:  watchDirs,
 		workingDir: opts.WorkingDir,
+		matcher:    pathmatch.New(opts.WorkingDir, includes, opts.Excludes, opts.Gitignore),
+		files:      make(map[string]stamp),
 	}
 }
 
@@ -64,6 +79,11 @@ func New(opts Options) *Debouncer {
 func (d *Debouncer) Start(ctx context.Context, in <-chan watcher.FileEvent) <-chan BuildSignal {
 	out := make(chan BuildSignal, 1)
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				fmt.Fprintf(os.Stderr, "[xgo] recovered from panic in debouncer: %v\n", r)
+			}
+		}()
 		defer close(out)
 		var (
 			timer  *time.Timer
@@ -99,16 +119,17 @@ func (d *Debouncer) Start(ctx context.Context, in <-chan watcher.FileEvent) <-ch
 				}
 				timer.Reset(d.delay)
 			case <-tickCh:
-				fingerprint, err := d.fingerprint()
-				if err == nil && fingerprint != "" && fingerprint == d.lastFingerprint {
+				for _, evt := range queue {
+					d.applyEvent(evt)
+				}
+				fingerprint := d.computeFingerprint()
+				if fingerprint == d.lastFingerprint {
 					queue = queue[:0]
 					timer = nil
 					tickCh = nil
 					continue
 				}
-				if err == nil {
-					d.lastFingerprint = fingerprint
-				}
+				d.lastFingerprint = fingerprint
 				signal := BuildSignal{Time: time.Now(), Fingerprint: fingerprint, Events: append([]watcher.FileEvent(nil), queue...)}
 				select {
 				case out <- signal:
@@ -133,19 +154,11 @@ func (d *Debouncer) Start(ctx context.Context, in <-chan watcher.FileEvent) <-ch
 	return out
 }
 
-// PrimeFingerprint sets initial fingerprint.
+// PrimeFingerprint performs the one-time full walk that seeds the in-memory
+// file index, and computes the initial fingerprint so the first real edit
+// has something to diff against.
 func (d *Debouncer) PrimeFingerprint() error {
-	fp, err := d.fingerprint()
-	if err != nil {
-		return err
-	}
-	d.lastFingerprint = fp
-	return nil
-}
-
-func (d *Debouncer) fingerprint() (string, error) {
-	h := sha256.New()
-	files := make([]string, 0, 256)
+	files := make(map[string]stamp, len(d.files))
 	for _, dir := range d.watchDirs {
 		root := dir
 		if !filepath.IsAbs(root) {
@@ -156,80 +169,66 @@ func (d *Debouncer) fingerprint() (string, error) {
 				return nil
 			}
 			if entry.IsDir() {
-				if d.isExcluded(path, true) {
+				if d.matcher.ExcludedDir(path) {
 					return filepath.SkipDir
 				}
 				return nil
 			}
-			if d.isExcluded(path, false) || !d.isIncluded(path) {
+			if !d.matcher.MatchFile(path) {
 				return nil
 			}
-			files = append(files, path)
+			info, err := entry.Info()
+			if err != nil {
+				return nil
+			}
+			files[path] = stamp{size: info.Size(), mtime: info.ModTime().UnixNano()}
 			return nil
 		})
 	}
-	sort.Strings(files)
-	for _, f := range files {
-		info, err := os.Stat(f)
-		if err != nil {
-			continue
-		}
-		line := fmt.Sprintf("%s|%d|%d\n", f, info.Size(), info.ModTime().UnixNano())
-		_, _ = h.Write([]byte(line))
-	}
-	return hex.EncodeToString(h.Sum(nil)), nil
+	d.files = files
+	d.lastFingerprint = d.computeFingerprint()
+	return nil
 }
 
-func (d *Debouncer) isIncluded(path string) bool {
-	base := filepath.Base(path)
-	rel := toRel(d.workingDir, path)
-	for _, p := range d.includes {
-		if matchPattern(rel, base, p) {
-			return true
-		}
+// applyEvent updates the in-memory file index for a single reported change,
+// stat-ing only that one path rather than re-walking the whole tree.
+func (d *Debouncer) applyEvent(evt watcher.FileEvent) {
+	path := evt.Path
+	if evt.EventType == "remove" || evt.EventType == "rename" {
+		delete(d.files, path)
+		return
 	}
-	return false
-}
-
-func (d *Debouncer) isExcluded(path string, isDir bool) bool {
-	base := filepath.Base(path)
-	rel := toRel(d.workingDir, path)
-	for _, p := range d.excludes {
-		pat := strings.TrimSpace(p)
-		if pat == "" {
-			continue
-		}
-		if isDir && strings.HasSuffix(pat, "/") && strings.Contains(rel+"/", strings.TrimSuffix(pat, "/")+"/") {
-			return true
-		}
-		if matchPattern(rel, base, pat) {
-			return true
-		}
-	}
-	return false
-}
-
-func toRel(wd, path string) string {
-	rel, err := filepath.Rel(wd, path)
+	info, err := os.Stat(path)
 	if err != nil {
-		return filepath.ToSlash(path)
+		// Gone by the time we got to it (e.g. a rename we saw as "create"
+		// racing a subsequent delete) - treat like a removal.
+		delete(d.files, path)
+		return
 	}
-	return filepath.ToSlash(rel)
+	if info.IsDir() {
+		return
+	}
+	if !d.matcher.MatchFile(path) {
+		delete(d.files, path)
+		return
+	}
+	d.files[path] = stamp{size: info.Size(), mtime: info.ModTime().UnixNano()}
 }
 
-func matchPattern(rel, base, pat string) bool {
-	pat = filepath.ToSlash(strings.TrimPrefix(strings.TrimPrefix(strings.TrimSpace(pat), "./"), "/"))
-	if pat == "" {
-		return false
+// computeFingerprint hashes the current in-memory file index. This is pure
+// CPU/memory work (sorting and hashing small strings) with zero syscalls -
+// cheap even for tens of thousands of entries - unlike the walk+stat pass
+// that seeds it, which only ever runs once in PrimeFingerprint.
+func (d *Debouncer) computeFingerprint() string {
+	h := sha256.New()
+	paths := make([]string, 0, len(d.files))
+	for p := range d.files {
+		paths = append(paths, p)
 	}
-	if strings.HasSuffix(pat, "/") {
-		return strings.Contains(rel+"/", strings.TrimSuffix(pat, "/")+"/")
+	sort.Strings(paths)
+	for _, p := range paths {
+		s := d.files[p]
+		fmt.Fprintf(h, "%s|%d|%d\n", p, s.size, s.mtime)
 	}
-	if ok, _ := filepath.Match(pat, base); ok {
-		return true
-	}
-	if ok, _ := filepath.Match(pat, rel); ok {
-		return true
-	}
-	return strings.Contains(rel, pat)
+	return hex.EncodeToString(h.Sum(nil))
 }

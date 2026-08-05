@@ -18,24 +18,35 @@ type Logger struct {
 	prefix     string
 	timestamps bool
 	colorize   bool
+	palette    []*color.Color
 	extraColor map[string]*color.Color
 	colorIdx   int
 }
 
-var palette = []*color.Color{
-	color.New(color.FgHiMagenta),
-	color.New(color.FgHiBlue),
-	color.New(color.FgHiYellow),
-	color.New(color.FgHiCyan),
-	color.New(color.FgHiWhite),
-	color.New(color.FgHiGreen),
+var paletteAttrs = []color.Attribute{
+	color.FgHiMagenta,
+	color.FgHiBlue,
+	color.FgHiYellow,
+	color.FgHiCyan,
+	color.FgHiWhite,
+	color.FgHiGreen,
 }
 
 // New creates a logger.
+//
+// Color state is kept entirely on the *color.Color instances this Logger
+// owns (via EnableColor/DisableColor), never on the fatih/color package's
+// global NoColor variable. Mutating that global used to make color
+// behavior a process-wide side effect of construction - harmless with a
+// single Logger, but a genuine data race the moment more than one exists
+// concurrently (as any test creating multiple Loggers found immediately).
 func New(prefix string, timestamps, colorize bool) *Logger {
-	color.NoColor = !colorize
 	if prefix == "" {
 		prefix = "[xgo]"
+	}
+	palette := make([]*color.Color, len(paletteAttrs))
+	for i, a := range paletteAttrs {
+		palette[i] = newColor(colorize, a)
 	}
 	return &Logger{
 		out:        os.Stdout,
@@ -43,8 +54,19 @@ func New(prefix string, timestamps, colorize bool) *Logger {
 		prefix:     prefix,
 		timestamps: timestamps,
 		colorize:   colorize,
+		palette:    palette,
 		extraColor: make(map[string]*color.Color),
 	}
+}
+
+func newColor(colorize bool, attrs ...color.Attribute) *color.Color {
+	c := color.New(attrs...)
+	if colorize {
+		c.EnableColor()
+	} else {
+		c.DisableColor()
+	}
+	return c
 }
 
 // Infof prints an info line.
@@ -71,9 +93,11 @@ func (l *Logger) Successf(format string, args ...any) {
 func (l *Logger) BuildError(output string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	sep := color.New(color.FgRed, color.Bold).Sprint("================================ BUILD ERROR ================================")
+	sepColor := newColor(l.colorize, color.FgRed, color.Bold)
+	bodyColor := newColor(l.colorize, color.FgRed)
+	sep := sepColor.Sprint("================================ BUILD ERROR ================================")
 	fmt.Fprintln(l.err, sep)
-	fmt.Fprintln(l.err, color.New(color.FgRed).Sprint(output))
+	fmt.Fprintln(l.err, bodyColor.Sprint(output))
 	fmt.Fprintln(l.err, sep)
 }
 
@@ -83,7 +107,7 @@ func (l *Logger) ExtraLine(name, line string) {
 	defer l.mu.Unlock()
 	c, ok := l.extraColor[name]
 	if !ok {
-		c = palette[l.colorIdx%len(palette)]
+		c = l.palette[l.colorIdx%len(l.palette)]
 		l.colorIdx++
 		l.extraColor[name] = c
 	}
@@ -91,7 +115,7 @@ func (l *Logger) ExtraLine(name, line string) {
 	if l.timestamps {
 		tstamp = time.Now().Format("15:04:05") + " "
 	}
-	prefix := color.New(color.FgCyan, color.Bold).Sprint(l.prefix)
+	prefix := newColor(l.colorize, color.FgCyan, color.Bold).Sprint(l.prefix)
 	namePrefix := c.Sprintf("[%s]", name)
 	fmt.Fprintf(l.out, "%s%s %s %s\n", tstamp, prefix, namePrefix, line)
 }
@@ -104,7 +128,7 @@ func (l *Logger) printLevel(w io.Writer, level string, fg color.Attribute, forma
 	if l.timestamps {
 		tstamp = time.Now().Format("15:04:05") + " "
 	}
-	prefix := color.New(color.FgCyan, color.Bold).Sprint(l.prefix)
-	lvl := color.New(fg, color.Bold).Sprintf("[%s]", level)
+	prefix := newColor(l.colorize, color.FgCyan, color.Bold).Sprint(l.prefix)
+	lvl := newColor(l.colorize, fg, color.Bold).Sprintf("[%s]", level)
 	fmt.Fprintf(w, "%s%s %s %s\n", tstamp, prefix, lvl, msg)
 }

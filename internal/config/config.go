@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -124,8 +125,10 @@ func Load(path string) (Config, error) {
 	}
 	cfg.FoundFile = true
 
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return Config{}, fmt.Errorf("parse config file: %w", err)
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	dec.KnownFields(true)
+	if err := dec.Decode(&cfg); err != nil {
+		return Config{}, fmt.Errorf("parse config file %s: %w (check for typo'd keys - unknown fields are rejected rather than silently ignored)", path, err)
 	}
 
 	applyDefaults(&cfg)
@@ -198,21 +201,67 @@ func applyDefaults(cfg *Config) {
 	if len(cfg.Watch.Include) == 0 {
 		cfg.Watch.Include = []string{"*.go"}
 	}
-	if cfg.Watch.Debounce <= 0 {
+	// Only exact zero means "unset" - a negative value is a typo, not a
+	// request for the default, and is caught by Validate instead of being
+	// silently coerced here.
+	if cfg.Watch.Debounce == 0 {
 		cfg.Watch.Debounce = 50 * time.Millisecond
 	}
-	if cfg.Build.Cmd == "" {
+	if strings.TrimSpace(cfg.Build.Cmd) == "" {
 		cfg.Build.Cmd = "go build -o ./tmp/xgo-app ."
 	}
-	if cfg.Build.Timeout <= 0 {
+	if cfg.Build.Timeout == 0 {
 		cfg.Build.Timeout = 30 * time.Second
 	}
-	if cfg.Run.Cmd == "" {
+	if strings.TrimSpace(cfg.Run.Cmd) == "" {
 		cfg.Run.Cmd = "./tmp/xgo-app"
 	}
-	if cfg.Log.Prefix == "" {
+	if strings.TrimSpace(cfg.Log.Prefix) == "" {
 		cfg.Log.Prefix = "[xgo]"
 	}
+}
+
+// Validate performs cheap, working-directory-independent structural checks
+// on a fully-merged config. It runs after applyDefaults, so it deliberately
+// does NOT re-check anything applyDefaults already backfills (an empty
+// watch.dirs, for instance, is a legitimate "use the default" - not an
+// error). It exists to catch the things a default can't paper over: a
+// negative duration is a typo, not "unset"; a blank entry in a list is not
+// "not configured".
+func Validate(cfg Config) error {
+	var problems []string
+
+	if cfg.Watch.Debounce < 0 {
+		problems = append(problems, fmt.Sprintf("watch.debounce must not be negative (got %s)", cfg.Watch.Debounce))
+	}
+	if cfg.Build.Timeout < 0 {
+		problems = append(problems, fmt.Sprintf("build.timeout must not be negative (got %s)", cfg.Build.Timeout))
+	}
+	if hasBlankEntry(cfg.Watch.Dirs) {
+		problems = append(problems, "watch.dirs contains a blank entry")
+	}
+	if hasBlankEntry(cfg.Watch.Include) {
+		problems = append(problems, "watch.include contains a blank entry")
+	}
+	for i, c := range cfg.ExtraCmds {
+		if strings.TrimSpace(c.Cmd) == "" {
+			problems = append(problems, fmt.Sprintf("extra_cmds[%d].cmd must not be blank", i))
+		}
+	}
+
+	if len(problems) > 0 {
+		return fmt.Errorf("invalid config: %s", strings.Join(problems, "; "))
+	}
+	return nil
+}
+
+func hasBlankEntry(list []string) bool {
+	for _, s := range list {
+		if strings.TrimSpace(s) == "" {
+			return true
+		}
+	}
+	return false
 }
 
 func uniqueStrings(in []string) []string {

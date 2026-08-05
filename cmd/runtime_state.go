@@ -12,6 +12,7 @@ import (
 )
 
 type runtimeState struct {
+	PID            int                 `yaml:"pid"`
 	UpdatedAt      time.Time           `yaml:"updated_at"`
 	WatchedDirs    []string            `yaml:"watched_dirs"`
 	Include        []string            `yaml:"include"`

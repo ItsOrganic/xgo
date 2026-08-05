@@ -87,7 +87,23 @@ func New(cfg Config) *Runner {
 }
 
 // Run listens for build signals and performs restart cycles.
-func (r *Runner) Run(ctx context.Context, in <-chan debouncer.BuildSignal) error {
+func (r *Runner) Run(ctx context.Context, in <-chan debouncer.BuildSignal) (runErr error) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			runErr = fmt.Errorf("recovered from panic in runner: %v", rec)
+			_ = r.stopAll(context.Background())
+		}
+	}()
+
+	// extra_cmds are started once, independently of the main app's rebuild
+	// cycle: they're typically long-running parallel watchers (e.g. `npm run
+	// watch`) that should keep their own incremental state alive across Go
+	// edits, not get torn down and cold-started on every single main-app
+	// rebuild.
+	if err := r.startExtras(ctx); err != nil {
+		r.cfg.Logger.Warnf("failed to start extra commands: %v", err)
+	}
+
 	if err := r.rebuildAndRestart(ctx); err != nil {
 		r.cfg.Logger.Errorf("initial build failed: %v", err)
 	}
@@ -141,10 +157,10 @@ func (r *Runner) rebuildAndRestart(parentCtx context.Context) error {
 	}
 	buildDuration := time.Since(start)
 
-	if err := r.stopAll(parentCtx); err != nil {
-		r.cfg.Logger.Warnf("stop old processes: %v", err)
+	if err := r.stopMain(parentCtx); err != nil {
+		r.cfg.Logger.Warnf("stop old process: %v", err)
 	}
-	if err := r.startAll(parentCtx); err != nil {
+	if err := r.startMain(parentCtx); err != nil {
 		return err
 	}
 	for _, hook := range r.cfg.AfterHooks {
@@ -187,29 +203,65 @@ func (r *Runner) runBuild(parentCtx context.Context) error {
 	return nil
 }
 
-func (r *Runner) startAll(ctx context.Context) error {
-	cmds := []CommandSpec{r.cfg.Main}
-	cmds = append(cmds, r.cfg.Extra...)
-	for _, spec := range cmds {
+// startMain starts (only) the main app process, as part of a rebuild cycle.
+func (r *Runner) startMain(ctx context.Context) error {
+	spec := r.cfg.Main
+	if strings.TrimSpace(spec.Cmd) == "" {
+		return nil
+	}
+	proc, err := r.startCmd(ctx, spec)
+	if err != nil {
+		return fmt.Errorf("start %s: %w", spec.Name, err)
+	}
+	r.mu.Lock()
+	r.procs[spec.Name] = proc
+	r.restartCount++
+	r.lastRestartTime = time.Now()
+	r.mu.Unlock()
+	r.cfg.Logger.Infof("started %s pid=%d", spec.Name, proc.pid)
+	return nil
+}
+
+// startExtras starts every configured extra_cmds entry once. Unlike the main
+// app, these are not restarted by rebuildAndRestart - see the comment in Run.
+func (r *Runner) startExtras(ctx context.Context) error {
+	var firstErr error
+	for _, spec := range r.cfg.Extra {
 		if strings.TrimSpace(spec.Cmd) == "" {
 			continue
 		}
 		proc, err := r.startCmd(ctx, spec)
 		if err != nil {
-			return fmt.Errorf("start %s: %w", spec.Name, err)
+			if firstErr == nil {
+				firstErr = fmt.Errorf("start %s: %w", spec.Name, err)
+			}
+			continue
 		}
 		r.mu.Lock()
 		r.procs[spec.Name] = proc
 		r.mu.Unlock()
 		r.cfg.Logger.Infof("started %s pid=%d", spec.Name, proc.pid)
 	}
-	r.mu.Lock()
-	r.restartCount++
-	r.lastRestartTime = time.Now()
-	r.mu.Unlock()
-	return nil
+	return firstErr
 }
 
+// stopMain stops (only) the currently tracked main app process, as part of a
+// rebuild cycle. Extra commands are left running untouched.
+func (r *Runner) stopMain(ctx context.Context) error {
+	r.mu.Lock()
+	p, ok := r.procs[r.cfg.Main.Name]
+	if ok {
+		delete(r.procs, r.cfg.Main.Name)
+	}
+	r.mu.Unlock()
+	if !ok {
+		return nil
+	}
+	return terminateProcess(ctx, p, r.cfg.SignalTimeout)
+}
+
+// stopAll stops every tracked process - main app and extras alike. Used only
+// at final shutdown, not per rebuild cycle.
 func (r *Runner) stopAll(ctx context.Context) error {
 	r.mu.Lock()
 	procs := make([]*processInfo, 0, len(r.procs))
@@ -229,7 +281,7 @@ func (r *Runner) stopAll(ctx context.Context) error {
 }
 
 func (r *Runner) startCmd(ctx context.Context, spec CommandSpec) (*processInfo, error) {
-	command := shellCommandContext(ctx, withArgs(spec.Cmd, spec.Args))
+	command := shellCommandContext(ctx, spec.Cmd, spec.Args...)
 	command.Stdin = os.Stdin
 
 	dir := r.cfg.WorkingDir
@@ -270,15 +322,30 @@ func (r *Runner) startCmd(ctx context.Context, spec CommandSpec) (*processInfo, 
 	proc := &processInfo{spec: spec, cmd: command, pid: command.Process.Pid, group: processGroupID(command), done: make(chan struct{})}
 
 	go func() {
+		defer func() {
+			if rec := recover(); rec != nil {
+				r.cfg.Logger.Errorf("recovered from panic tracking %s (pid=%d): %v", spec.Name, proc.pid, rec)
+			}
+		}()
 		if spec.Name != r.cfg.Main.Name {
 			var wg sync.WaitGroup
 			wg.Add(2)
 			go func() {
 				defer wg.Done()
+				defer func() {
+					if rec := recover(); rec != nil {
+						r.cfg.Logger.Errorf("recovered from panic forwarding %s output: %v", spec.Name, rec)
+					}
+				}()
 				r.forwardPrefixed(spec.Name, stdout)
 			}()
 			go func() {
 				defer wg.Done()
+				defer func() {
+					if rec := recover(); rec != nil {
+						r.cfg.Logger.Errorf("recovered from panic forwarding %s output: %v", spec.Name, rec)
+					}
+				}()
 				r.forwardPrefixed(spec.Name, stderr)
 			}()
 			wg.Wait()
@@ -353,11 +420,24 @@ func mergeEnv(base, extra []string) []string {
 	return out
 }
 
-func shellCommandContext(ctx context.Context, raw string) *exec.Cmd {
+// shellCommandContext builds a shell-wrapped command. On Unix, extra args are
+// passed as real, separate argv elements via the shell's own "$@" mechanism
+// rather than being hand-quoted into the command string - this removes an
+// entire class of quoting bugs (an arg containing a single quote, a space, a
+// glob character, etc. is handled correctly by the shell itself instead of
+// by our own escaping logic). Windows's cmd.exe has no equivalent mechanism,
+// so it still relies on withArgs/shellQuote - a known, documented limitation
+// (see architecture.md), left as-is here rather than risked in the same
+// change as the Unix fix.
+func shellCommandContext(ctx context.Context, raw string, args ...string) *exec.Cmd {
 	if isWindows() {
-		return exec.CommandContext(ctx, "cmd", "/C", raw)
+		return exec.CommandContext(ctx, "cmd", "/C", withArgs(raw, args))
 	}
-	return exec.CommandContext(ctx, "sh", "-c", raw)
+	if len(args) == 0 {
+		return exec.CommandContext(ctx, "sh", "-c", raw)
+	}
+	shArgs := append([]string{"-c", raw + ` "$@"`, "sh"}, args...)
+	return exec.CommandContext(ctx, "sh", shArgs...)
 }
 
 func withArgs(cmd string, args []string) string {

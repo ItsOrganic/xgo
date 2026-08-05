@@ -34,3 +34,19 @@ func forceKill(proc *os.Process, groupID int) error {
 	}
 	return proc.Kill()
 }
+
+// IsAlive reports whether pid refers to a currently-running process. Used by
+// `xgo status` to tell a live run apart from stale leftover state.
+func IsAlive(pid int) bool {
+	if pid <= 0 {
+		return false
+	}
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+	// On Unix, os.FindProcess always succeeds regardless of whether pid
+	// exists; signal 0 is the standard existence/permission probe that sends
+	// nothing but still errors if the process is gone.
+	return proc.Signal(syscall.Signal(0)) == nil
+}

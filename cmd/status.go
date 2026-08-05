@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/ItsOrganic/xgo/internal/runner"
+
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
@@ -35,6 +37,14 @@ func newStatusCmd() *cobra.Command {
 			}
 
 			out := cmd.OutOrStdout()
+			switch {
+			case st.PID <= 0:
+				fmt.Fprintln(out, "Status: unknown (no pid recorded - this state file predates the liveness check)")
+			case runner.IsAlive(st.PID):
+				fmt.Fprintf(out, "Status: RUNNING (pid=%d)\n", st.PID)
+			default:
+				fmt.Fprintf(out, "Status: NOT RUNNING (stale - last updated %s)\n", st.UpdatedAt.Format("2006-01-02 15:04:05"))
+			}
 			fmt.Fprintf(out, "Updated: %s\n", st.UpdatedAt.Format("2006-01-02 15:04:05"))
 			fmt.Fprintf(out, "Config: %s (found=%t)\n", st.ConfigPath, st.FoundConfig)
 			fmt.Fprintf(out, "Debounce: %s\n", st.Debounce)

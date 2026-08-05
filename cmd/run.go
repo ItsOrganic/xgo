@@ -13,6 +13,7 @@ import (
 	"github.com/ItsOrganic/xgo/internal/config"
 	"github.com/ItsOrganic/xgo/internal/debouncer"
 	"github.com/ItsOrganic/xgo/internal/logger"
+	"github.com/ItsOrganic/xgo/internal/pathmatch"
 	"github.com/ItsOrganic/xgo/internal/runner"
 	"github.com/ItsOrganic/xgo/internal/watcher"
 
@@ -95,6 +96,9 @@ func newRunCmd(opts *rootOptions) *cobra.Command {
 			if inferredBuildTarget != "" {
 				cfg.Build.Cmd = fmt.Sprintf("go build -o ./tmp/xgo-app %s", shellQuote(inferredBuildTarget))
 			}
+			if err := config.Validate(cfg); err != nil {
+				return err
+			}
 
 			if err := os.MkdirAll(filepath.Join(wd, "tmp"), 0o755); err != nil {
 				return fmt.Errorf("create tmp directory: %w", err)
@@ -107,10 +111,16 @@ func newRunCmd(opts *rootOptions) *cobra.Command {
 			if inferredBuildTarget != "" {
 				log.Infof("inferred build target: %s", inferredBuildTarget)
 			}
+			gitignore, err := pathmatch.LoadGitignore(wd)
+			if err != nil {
+				return fmt.Errorf("read .gitignore: %w", err)
+			}
+
 			w, err := watcher.New(watcher.Options{
 				Dirs:         cfg.Watch.Dirs,
 				Includes:     cfg.Watch.Include,
 				Excludes:     cfg.Watch.Exclude,
+				Gitignore:    gitignore,
 				Verbose:      verbose,
 				OutputBinary: "tmp/xgo-app",
 				WorkingDir:   wd,
@@ -156,6 +166,7 @@ func newRunCmd(opts *rootOptions) *cobra.Command {
 				WatchDirs:  cfg.Watch.Dirs,
 				Includes:   cfg.Watch.Include,
 				Excludes:   append(cfg.Watch.Exclude, "vendor/", ".git/", "tmp/", "node_modules/", "*.pb.go", "*_mock.go"),
+				Gitignore:  gitignore,
 				WorkingDir: wd,
 			})
 			_ = db.PrimeFingerprint()
@@ -183,6 +194,7 @@ func newRunCmd(opts *rootOptions) *cobra.Command {
 			})
 
 			baseState := runtimeState{
+				PID:           os.Getpid(),
 				WatchedDirs:   w.WatchedDirs(),
 				Include:       append([]string{}, cfg.Watch.Include...),
 				Exclude:       append([]string{}, cfg.Watch.Exclude...),

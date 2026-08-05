@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
+	"github.com/ItsOrganic/xgo/internal/pathmatch"
 	"github.com/fsnotify/fsnotify"
 )
 
@@ -24,6 +24,7 @@ type Options struct {
 	Dirs         []string
 	Includes     []string
 	Excludes     []string
+	Gitignore    []string
 	Verbose      bool
 	OutputBinary string
 	WorkingDir   string
@@ -33,9 +34,7 @@ type Options struct {
 type Watcher struct {
 	fsw             *fsnotify.Watcher
 	dirs            []string
-	includes        []string
-	excludes        []string
-	gitignore       []string
+	matcher         *pathmatch.Matcher
 	outputBinary    string
 	workingDir      string
 	mu              sync.Mutex
@@ -64,24 +63,22 @@ func New(opts Options) (*Watcher, error) {
 	}
 	excludes := append(autoExcludes, opts.Excludes...)
 
+	dirs := opts.Dirs
+	if len(dirs) == 0 {
+		dirs = []string{"."}
+	}
+	includes := opts.Includes
+	if len(includes) == 0 {
+		includes = []string{"*.go"}
+	}
+
 	w := &Watcher{
 		fsw:          fsw,
-		dirs:         opts.Dirs,
-		includes:     opts.Includes,
-		excludes:     excludes,
+		dirs:         dirs,
+		matcher:      pathmatch.New(wd, includes, excludes, opts.Gitignore),
 		outputBinary: opts.OutputBinary,
 		workingDir:   wd,
 		watched:      make(map[string]struct{}),
-	}
-	if len(w.dirs) == 0 {
-		w.dirs = []string{"."}
-	}
-	if len(w.includes) == 0 {
-		w.includes = []string{"*.go"}
-	}
-	if err := w.loadGitignore(); err != nil {
-		_ = fsw.Close()
-		return nil, err
 	}
 	return w, nil
 }
@@ -102,9 +99,20 @@ func (w *Watcher) Start(ctx context.Context) (<-chan FileEvent, <-chan error) {
 	}
 
 	go func() {
+		// Defers run LIFO: register close(events)/close(errs)/fsw.Close()
+		// first so the recover handler (registered last, runs first) can
+		// still safely send on errs before it's closed.
 		defer close(events)
 		defer close(errs)
 		defer w.fsw.Close()
+		defer func() {
+			if r := recover(); r != nil {
+				select {
+				case errs <- fmt.Errorf("recovered from panic in watcher event loop: %v", r):
+				default:
+				}
+			}
+		}()
 
 		for {
 			select {
@@ -124,6 +132,14 @@ func (w *Watcher) Start(ctx context.Context) (<-chan FileEvent, <-chan error) {
 				}
 				if evt.Op&fsnotify.Create == fsnotify.Create {
 					w.tryAddDir(evt.Name, errs)
+				}
+				if evt.Op&(fsnotify.Remove|fsnotify.Rename) != 0 {
+					// A watched directory that's deleted (or renamed away)
+					// invalidates the underlying OS watch. Forget it so a
+					// later Create at the same path re-registers instead of
+					// silently staying dark forever (the dedup check in
+					// addWatch would otherwise skip it as "already watched").
+					w.removeWatch(evt.Name)
 				}
 				if !w.shouldEmit(evt.Name, evt.Op) {
 					continue
@@ -150,25 +166,6 @@ func (w *Watcher) WatchedDirs() []string {
 	return out
 }
 
-func (w *Watcher) loadGitignore() error {
-	path := filepath.Join(w.workingDir, ".gitignore")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return fmt.Errorf("read .gitignore: %w", err)
-	}
-	for _, line := range strings.Split(string(data), "\n") {
-		trim := strings.TrimSpace(line)
-		if trim == "" || strings.HasPrefix(trim, "#") || strings.HasPrefix(trim, "!") {
-			continue
-		}
-		w.gitignore = append(w.gitignore, trim)
-	}
-	return nil
-}
-
 func (w *Watcher) addInitialDirs(errs chan<- error) error {
 	for _, dir := range w.dirs {
 		root := dir
@@ -186,7 +183,7 @@ func (w *Watcher) addInitialDirs(errs chan<- error) error {
 			if !d.IsDir() {
 				return nil
 			}
-			if w.isDirExcluded(path) {
+			if w.matcher.ExcludedDir(path) {
 				return filepath.SkipDir
 			}
 			if err := w.addWatch(path); err != nil {
@@ -219,12 +216,32 @@ func (w *Watcher) addWatch(dir string) error {
 	return nil
 }
 
+// removeWatch forgets a previously-watched directory. Safe to call for paths
+// that were never watched (e.g. a deleted file rather than a directory) -
+// it's then just a no-op map lookup.
+func (w *Watcher) removeWatch(dir string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if _, exists := w.watched[dir]; !exists {
+		return
+	}
+	delete(w.watched, dir)
+	_ = w.fsw.Remove(dir) // best-effort; the OS watch is already invalid if the dir is gone
+	out := w.watchedSnapshot[:0]
+	for _, d := range w.watchedSnapshot {
+		if d != dir {
+			out = append(out, d)
+		}
+	}
+	w.watchedSnapshot = out
+}
+
 func (w *Watcher) tryAddDir(path string, errs chan<- error) {
 	info, err := os.Stat(path)
 	if err != nil || !info.IsDir() {
 		return
 	}
-	if w.isDirExcluded(path) {
+	if w.matcher.ExcludedDir(path) {
 		return
 	}
 	if err := w.addWatch(path); err != nil {
@@ -242,63 +259,26 @@ func (w *Watcher) shouldEmit(path string, op fsnotify.Op) bool {
 	if w.isExcluded(path) {
 		return false
 	}
-	return w.matchesInclude(path)
+	return w.matcher.Included(path)
 }
 
-func (w *Watcher) isDirExcluded(path string) bool {
+// isExcluded layers the output-binary exclusion (watcher-specific: we never
+// want a rebuild triggered by writing our own compiled output) on top of the
+// shared include/exclude pattern matcher.
+func (w *Watcher) isExcluded(path string) bool {
 	rel, err := filepath.Rel(w.workingDir, path)
 	if err != nil {
 		rel = path
 	}
-	clean := filepath.ToSlash(rel) + "/"
-	for _, p := range w.excludes {
-		if strings.HasSuffix(p, "/") {
-			if strings.Contains(clean, trimLeadingDotSlash(filepath.ToSlash(p))) {
-				return true
-			}
-		}
-	}
-	for _, p := range w.gitignore {
-		if strings.HasSuffix(p, "/") && strings.Contains(clean, trimLeadingDotSlash(filepath.ToSlash(p))) {
-			return true
-		}
-	}
-	return false
-}
-
-func (w *Watcher) isExcluded(path string) bool {
-	rel, _ := filepath.Rel(w.workingDir, path)
 	rel = filepath.ToSlash(rel)
-	base := filepath.Base(path)
 	if rel == "" || rel == "." {
 		rel = filepath.ToSlash(path)
 	}
+	base := filepath.Base(path)
 	if rel == filepath.ToSlash(w.outputBinary) || base == filepath.Base(w.outputBinary) {
 		return true
 	}
-	for _, p := range append([]string{}, w.excludes...) {
-		if patternMatch(rel, base, p) {
-			return true
-		}
-	}
-	for _, p := range w.gitignore {
-		if patternMatch(rel, base, p) {
-			return true
-		}
-	}
-	return false
-}
-
-func (w *Watcher) matchesInclude(path string) bool {
-	rel, _ := filepath.Rel(w.workingDir, path)
-	rel = filepath.ToSlash(rel)
-	base := filepath.Base(path)
-	for _, p := range w.includes {
-		if patternMatch(rel, base, p) {
-			return true
-		}
-	}
-	return false
+	return w.matcher.ExcludedFile(path)
 }
 
 func opString(op fsnotify.Op) string {
@@ -316,33 +296,4 @@ func opString(op fsnotify.Op) string {
 	default:
 		return "unknown"
 	}
-}
-
-func patternMatch(relPath, base, pattern string) bool {
-	pat := trimLeadingDotSlash(filepath.ToSlash(strings.TrimSpace(pattern)))
-	if pat == "" {
-		return false
-	}
-	if strings.HasSuffix(pat, "/") {
-		needle := pat
-		if !strings.HasSuffix(needle, "/") {
-			needle += "/"
-		}
-		rel := trimLeadingDotSlash(relPath)
-		return strings.HasPrefix(rel, needle) || strings.Contains("/"+rel+"/", "/"+needle)
-	}
-	if ok, _ := filepath.Match(pat, base); ok {
-		return true
-	}
-	if ok, _ := filepath.Match(pat, relPath); ok {
-		return true
-	}
-	if strings.Contains(relPath, pat) {
-		return true
-	}
-	return false
-}
-
-func trimLeadingDotSlash(s string) string {
-	return strings.TrimPrefix(strings.TrimPrefix(s, "./"), "/")
 }
