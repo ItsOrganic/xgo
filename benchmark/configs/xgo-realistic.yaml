@@ -1,0 +1,16 @@
+watch:
+  dirs: ["."]
+  include: ["*.go"]
+  exclude: []
+  debounce: 200ms
+
+build:
+  cmd: "go build -o ./tmp/xgo-app ."
+  timeout: 30s
+
+run:
+  cmd: "./tmp/xgo-app"
+
+log:
+  timestamps: false
+  color: false

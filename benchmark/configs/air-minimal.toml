@@ -1,0 +1,25 @@
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  cmd = "go build -o ./tmp/air-app ."
+  entrypoint = "./tmp/air-app"
+  include_ext = ["go"]
+  exclude_dir = ["tmp"]
+  delay = 200
+  stop_on_error = true
+  send_interrupt = false
+  kill_delay = "500ms"
+
+[log]
+  time = false
+  main_only = false
+
+[color]
+  main = "cyan"
+  watcher = "yellow"
+  build = "yellow"
+  runner = "green"
+
+[misc]
+  clean_on_exit = true

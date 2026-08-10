@@ -426,9 +426,8 @@ func mergeEnv(base, extra []string) []string {
 // entire class of quoting bugs (an arg containing a single quote, a space, a
 // glob character, etc. is handled correctly by the shell itself instead of
 // by our own escaping logic). Windows's cmd.exe has no equivalent mechanism,
-// so it still relies on withArgs/shellQuote - a known, documented limitation
-// (see architecture.md), left as-is here rather than risked in the same
-// change as the Unix fix.
+// so it still relies on withArgs/shellQuote - a known limitation, left
+// as-is here rather than risked in the same change as the Unix fix.
 func shellCommandContext(ctx context.Context, raw string, args ...string) *exec.Cmd {
 	if isWindows() {
 		return exec.CommandContext(ctx, "cmd", "/C", withArgs(raw, args))

@@ -1,0 +1,16 @@
+watch:
+  dirs: ["."]
+  include: ["*.go"]
+  exclude: []
+  # debounce intentionally omitted - uses xgo's own built-in default (50ms)
+
+build:
+  cmd: "go build -o ./tmp/xgo-app ."
+  timeout: 30s
+
+run:
+  cmd: "./tmp/xgo-app"
+
+log:
+  timestamps: false
+  color: false

@@ -1,1 +1,16 @@
 tmp/
+.private/
+
+# build artifacts
+xgo
+xgo.exe
+/dist/
+
+# local, user-specific config (xgo.yaml.example is the template that IS tracked)
+xgo.yaml
+
+# OS / editor cruft
+.DS_Store
+*.swp
+.vscode/
+.idea/

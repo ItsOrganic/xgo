@@ -125,9 +125,9 @@ func (m *Matcher) relBase(path string) (rel, base string) {
 // falling back to a raw substring match on the relative path.
 //
 // That substring fallback is intentionally loose (matches "test" against
-// "internal/latest/x.go") - it's a known footgun for hand-written patterns,
-// documented in architecture.md, kept as-is here rather than changed
-// silently since it could alter behavior for existing xgo.yaml files.
+// "internal/latest/x.go") - it's a known, documented footgun for
+// hand-written patterns, kept as-is here rather than changed silently since
+// it could alter behavior for existing xgo.yaml files.
 func patternMatch(relPath, base, pattern string) bool {
 	pat := trimLeadingDotSlash(filepath.ToSlash(strings.TrimSpace(pattern)))
 	if pat == "" {
