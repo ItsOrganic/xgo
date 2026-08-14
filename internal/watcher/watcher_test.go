@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/fsnotify/fsnotify"
 )
 
 func recvEvent(t *testing.T, events <-chan FileEvent, timeout time.Duration) (FileEvent, bool) {
@@ -115,6 +117,32 @@ func TestWatcher_DetectsEditAfterDirDeleteAndRecreate(t *testing.T) {
 			}
 		case <-deadline:
 			t.Fatal("no event observed for a file created in a deleted-and-recreated directory - it silently stopped being watched")
+		}
+	}
+}
+
+func TestShouldEmit_IgnoresChmodButNotContentChanges(t *testing.T) {
+	dir := t.TempDir()
+	w, err := New(Options{Dirs: []string{"."}, Includes: []string{"*.go"}, OutputBinary: "tmp/xgo-app", WorkingDir: dir})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer w.fsw.Close()
+
+	path := filepath.Join(dir, "main.go")
+
+	// A chmod on a watched, included .go file must not reach the debouncer:
+	// permission bits can't change what the compiler produces, and `go
+	// build` itself emits these, so honoring them costs a full debounce +
+	// fingerprint cycle to discover nothing happened.
+	if w.shouldEmit(path, fsnotify.Chmod) {
+		t.Error("chmod on an included file should not trigger a rebuild")
+	}
+
+	// The events that genuinely can change the build still must.
+	for _, op := range []fsnotify.Op{fsnotify.Write, fsnotify.Create, fsnotify.Remove, fsnotify.Rename} {
+		if !w.shouldEmit(path, op) {
+			t.Errorf("%v on an included file should trigger a rebuild", op)
 		}
 	}
 }

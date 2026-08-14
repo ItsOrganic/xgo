@@ -252,8 +252,16 @@ func (w *Watcher) tryAddDir(path string, errs chan<- error) {
 	}
 }
 
+// shouldEmit reports whether a raw fsnotify event is worth waking the
+// rebuild pipeline for.
+//
+// Chmod is deliberately excluded: a permission or timestamp change cannot
+// affect compilation, but it's emitted liberally - by `go build` itself, by
+// chmod, and by several editors' save paths - and every one of them costs a
+// debounce cycle and a fingerprint recompute to conclude nothing happened.
+// wgo and air both ignore it too.
 func (w *Watcher) shouldEmit(path string, op fsnotify.Op) bool {
-	if op&(fsnotify.Write|fsnotify.Create|fsnotify.Remove|fsnotify.Rename|fsnotify.Chmod) == 0 {
+	if op&(fsnotify.Write|fsnotify.Create|fsnotify.Remove|fsnotify.Rename) == 0 {
 		return false
 	}
 	if w.isExcluded(path) {

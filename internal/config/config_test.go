@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -16,8 +17,14 @@ func TestLoad_NoFile_UsesDefaults(t *testing.T) {
 	if cfg.FoundFile {
 		t.Fatalf("FoundFile should be false when no config file exists")
 	}
-	if cfg.Build.Cmd != "go build -o ./tmp/xgo-app ." {
+	if cfg.Build.Cmd != DefaultBuildCmd {
 		t.Errorf("unexpected default build cmd: %q", cfg.Build.Cmd)
+	}
+	// The stripping flags are a deliberate, measured default (see
+	// DefaultBuildFlags) - assert them explicitly so silently dropping them
+	// shows up as a test failure rather than as a 20% build-time regression.
+	if !strings.Contains(cfg.Build.Cmd, `-ldflags="-s -w"`) {
+		t.Errorf("default build cmd should ship the stripping flags, got %q", cfg.Build.Cmd)
 	}
 	if cfg.Watch.Debounce != 50*time.Millisecond {
 		t.Errorf("unexpected default debounce: %v", cfg.Watch.Debounce)

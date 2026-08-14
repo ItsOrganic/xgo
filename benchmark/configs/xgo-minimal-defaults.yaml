@@ -5,7 +5,11 @@ watch:
   # debounce intentionally omitted - uses xgo's own built-in default (50ms)
 
 build:
-  cmd: "go build -o ./tmp/xgo-app ."
+  # matches xgo's own shipped default (config.DefaultBuildCmd) - the
+  # stripping flags are part of what you get out of the box, exactly like
+  # the 50ms debounce. fair mode deliberately drops them so every tool
+  # builds with an identical command.
+  cmd: "go build -ldflags=\"-s -w\" -o ./tmp/xgo-app ."
   timeout: 30s
 
 run:
