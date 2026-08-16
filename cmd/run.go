@@ -94,7 +94,7 @@ func newRunCmd(opts *rootOptions) *cobra.Command {
 			}
 			config.MergeOverrides(&cfg, ovr)
 			if inferredBuildTarget != "" {
-				cfg.Build.Cmd = fmt.Sprintf("go build -o ./tmp/xgo-app %s", shellQuote(inferredBuildTarget))
+				cfg.Build.Cmd = fmt.Sprintf("go build %s -o ./tmp/xgo-app %s", config.DefaultBuildFlags, shellQuote(inferredBuildTarget))
 			}
 			if err := config.Validate(cfg); err != nil {
 				return err
