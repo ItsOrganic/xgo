@@ -19,26 +19,28 @@ command.
 ## TL;DR
 
 - **`defaults` mode: xgo is substantially faster out of the box.** Median
-  rebuild latency is **~1.85x faster than wgo** and **~3.9x faster than
-  air**, consistently across both scenarios and with tight p95s.
-- **Cold start is now a tie with wgo** (~150ms vs ~150ms) and **~2.2x
-  faster than air**. This used to be xgo's clear loss — see
-  [What changed](#what-changed-since-the-previous-run) below.
-- **`fair` mode: rebuild latency is a statistical tie** across all three
-  tools, in both scenarios. Held to the same debounce and the same build
-  command, the three engines do not meaningfully differ. That is the honest
-  read: xgo's `defaults`-mode win is a *configuration* win, not a claim that
-  its watcher is architecturally faster.
-- **wgo is still the leanest on memory** at steady state (~31-34 MiB vs
-  xgo's ~39-43 MiB). air is heaviest in `fair` mode; xgo and air are close
-  in `defaults` mode.
-- Zero failed trials across all 336 measured runs in the final set.
+  rebuild latency is **~2.0x faster than wgo** and **~4.4x faster than
+  air**, consistently across both scenarios.
+- **Cold start ties with wgo** (~66ms vs ~64ms) and is **~4.4x faster than
+  air** (~295ms). air pays a full re-link on every start because it deletes
+  its own build output on exit.
+- **`fair` mode: near-parity, with xgo trailing slightly.** Held to the same
+  debounce and the same build command, xgo is consistently **~17ms (~3.4%)
+  slower** than wgo. That gap is small but it points the same direction in
+  every measurement, so it is reported as a real if minor deficit rather
+  than a tie — it is xgo's own per-cycle overhead, and it is the thing
+  worth attacking next.
+- **wgo remains the leanest on memory** (~36-45 MiB vs xgo's ~46-51 MiB).
+- Zero failed trials across all 336 measured runs.
 
 ## Methodology
 
 **Machine**: AMD Ryzen 5 5600H (12 threads), 13GiB RAM, Kali GNU/Linux
-Rolling (Linux 6.6.15), Go 1.23.0, linux/amd64. Single machine — see
-[Limitations](#limitations) for what that does and doesn't support claiming.
+Rolling (Linux 6.6.15), linux/amd64.
+
+**Go toolchain**: **go1.25.13**, pinned via the `toolchain` directive in
+both `go.mod` files. See [Toolchain note](#toolchain-note-read-before-comparing-to-your-own-shell)
+— it materially affects absolute numbers.
 
 **Tool versions**: `xgo` built from this repo's current source
 (`benchmark/` builds it fresh on every run, so it always measures the
@@ -51,9 +53,9 @@ committed code, never a stale local install). `wgo` v0.6.4. `air` v1.67.4.
   service layer combining them), a few hundred LOC.
 
 Both apps print `READY build=<N> ts=<unixnano>` the instant they're bound
-and about to accept connections. This is the only thing the benchmark
-harness watches for on each tool's stdout — detection logic is identical
-regardless of which tool is wrapping the process.
+and about to accept connections. This is the only thing the harness watches
+for on each tool's stdout — detection logic is identical regardless of which
+tool is wrapping the process.
 
 **The two modes, concretely.** `fair` mode gives all three tools a 200ms
 debounce/delay *and the identical build command* `go build -o ./tmp/X-app .`.
@@ -70,22 +72,17 @@ kept out of `fair` mode.
    first as warmup, report median/p95 of the remaining 7.
 2. **Rebuild latency**: start the tool once, confirm the first build comes
    up (not counted — that's cold-start), then make 20 simulated edits
-   400ms apart (rewriting a `BuildMarker` constant), timing edit-to-ready
-   for each. Discard the first 3 as warmup, report median/p95 of the
-   remaining 17.
-3. **Resource usage**: sampled every 200ms during the rebuild-latency loop
-   only, walking `/proc` for the tool's *entire* process tree and summing
-   RSS and CPU time. Peak RSS is dominated by the `go build` compiler
-   subprocess, not steady-state idle memory.
+   400ms apart, timing edit-to-ready for each. Discard the first 3 as
+   warmup, report median/p95 of the remaining 17.
+3. **Resource usage**: sampled every 200ms during the rebuild-latency loop,
+   walking `/proc` for the tool's *entire* process tree. Peak RSS is
+   dominated by the `go build` compiler subprocess.
 
 **Reproduce it**:
 ```bash
 cd benchmark
 go run . --results results.json
 ```
-Runs all 12 (tool × scenario × mode) combinations, about 7 minutes on the
-machine above. `results.json` has every raw measurement, not just the
-summary stats below.
 
 ## Results — defaults mode (each tool exactly as it ships)
 
@@ -93,32 +90,31 @@ summary stats below.
 
 | Metric | xgo | wgo | air |
 |---|---:|---:|---:|
-| Rebuild latency median (ms) | **340.0** | 628.8 | 1322.7 |
-| Rebuild latency p95 (ms) | **370.9** | 649.5 | 1339.9 |
-| Cold-start median (ms) | 150.4 | 149.3 | 330.4 |
-| Avg memory (MiB) | 38.6 | **33.0** | 42.9 |
-| Avg CPU during rebuild loop | 32.0% | 32.7% | 18.6% |
+| Rebuild latency median (ms) | **296.7** | 596.4 | 1297.4 |
+| Rebuild latency p95 (ms) | **328.6** | 634.3 | 1335.4 |
+| Cold-start median (ms) | 66.3 | **62.8** | 292.1 |
+| Avg memory (MiB) | 46.0 | **39.9** | 44.8 |
+| Avg CPU during rebuild loop | 41.5% | 39.7% | 25.6% |
 
 ### Realistic scenario
 
 | Metric | xgo | wgo | air |
 |---|---:|---:|---:|
-| Rebuild latency median (ms) | **342.9** | 634.1 | 1331.9 |
-| Rebuild latency p95 (ms) | **391.5** | 647.5 | 1361.0 |
-| Cold-start median (ms) | 155.1 | 147.9 | 342.0 |
-| Avg memory (MiB) | 39.0 | **31.0** | 39.6 |
-| Avg CPU during rebuild loop | 32.8% | 31.8% | 18.2% |
+| Rebuild latency median (ms) | **299.7** | 588.4 | 1304.3 |
+| Rebuild latency p95 (ms) | **328.1** | 601.5 | 1326.6 |
+| Cold-start median (ms) | **65.5** | 65.9 | 296.7 |
+| Avg memory (MiB) | 46.1 | **36.2** | 45.2 |
+| Avg CPU during rebuild loop | 42.1% | 38.3% | 23.8% |
 
-Two things drive xgo's rebuild win here, both shipped defaults: a 50ms
-debounce against wgo's 300ms and air's 1000ms, and `-ldflags="-s -w"`,
-which drops the symbol table and DWARF info that the reload loop never
-reads. Linking is the most expensive phase of a rebuild, and skipping that
-output measures at ~124ms saved per build in isolation.
+Two shipped defaults drive xgo's rebuild win: a 50ms debounce against wgo's
+300ms and air's 1000ms, and `-ldflags="-s -w"`, which drops the symbol table
+and DWARF info the reload loop never reads. Linking is the most expensive
+phase of a rebuild, and skipping that output measures at **78ms saved per
+build** in isolation on this toolchain (386ms → 308ms).
 
-Note air's *lower* CPU% is a direct consequence of its 1000ms delay — it is
-doing less work per second specifically because it is reacting a full
-second later, not because it is more efficient per rebuild. See
-[A note on the CPU metric](#a-note-on-the-cpu-metric).
+air's lower CPU% is a direct consequence of its 1000ms delay — it is doing
+less work per second because it reacts a full second later, not because it
+is more efficient per rebuild. See [A note on the CPU metric](#a-note-on-the-cpu-metric).
 
 ## Results — fair mode (equal debounce, identical build command)
 
@@ -126,80 +122,131 @@ second later, not because it is more efficient per rebuild. See
 
 | Metric | xgo | wgo | air |
 |---|---:|---:|---:|
-| Rebuild latency median (ms) | 562.8 | 549.7 | 559.6 |
-| Rebuild latency p95 (ms) | 580.3 | 572.5 | 575.8 |
-| Cold-start median (ms) | 162.3 | 152.8 | 350.4 |
-| Avg memory (MiB) | 41.7 | **34.5** | 52.0 |
-| Avg CPU during rebuild loop | 34.8% | 34.9% | 34.7% |
+| Rebuild latency median (ms) | 513.6 | **496.6** | 496.7 |
+| Rebuild latency p95 (ms) | 529.8 | **507.1** | 509.1 |
+| Cold-start median (ms) | 65.6 | **64.1** | 297.5 |
+| Avg memory (MiB) | 50.7 | **39.0** | 58.4 |
+| Avg CPU during rebuild loop | 42.5% | 45.5% | 45.0% |
 
 ### Realistic scenario
 
 | Metric | xgo | wgo | air |
 |---|---:|---:|---:|
-| Rebuild latency median (ms) | 550.7 | 531.1 | 528.4 |
-| Rebuild latency p95 (ms) | 578.9 | 552.3 | 543.1 |
-| Cold-start median (ms) | 145.6 | 153.0 | 324.5 |
-| Avg memory (MiB) | 42.8 | **33.9** | 50.0 |
-| Avg CPU during rebuild loop | 33.7% | 36.6% | 33.7% |
+| Rebuild latency median (ms) | 515.5 | 497.9 | **492.8** |
+| Rebuild latency p95 (ms) | 534.5 | 530.0 | **514.1** |
+| Cold-start median (ms) | 64.7 | **63.8** | 297.5 |
+| Avg memory (MiB) | 51.1 | **44.9** | 57.8 |
+| Avg CPU during rebuild loop | 44.7% | 49.0% | 44.9% |
 
-Rebuild-latency gaps here (≤22ms) are inside run-to-run variance for every
-tool — a genuine tie, not a close win.
+**xgo trails by ~17ms here, and the direction is consistent.** Across every
+fair-mode measurement taken — both scenarios on this toolchain, and both
+scenarios on the previous one — xgo is the slowest of the three, by 13-20ms.
+An earlier version of this report called that a statistical tie; with the
+gap pointing the same way in all four comparisons, it is more honest to call
+it a small real deficit. It is xgo's own per-cycle overhead — plausibly the
+`sh -c` wrapper around both build and app, the extra event-relay hop, and
+fingerprint recomputation — and it is the natural next target.
 
 ## Interpretation
 
-**Rebuild latency ties in `fair` mode because `go build` dominates.** A
-breakdown of one edit-to-ready cycle on this machine: xgo's own startup
-(config load, watcher walk, fingerprint priming) is ~10ms, stopping the old
-process and starting the new one is ~10ms, and essentially everything else
-is the compiler. Of that, the link step alone is ~350-400ms. Once every tool
-is held to the same debounce and the same build command, there is very
-little left for a hot-reload tool to differentiate on.
+**Rebuild latency is dominated by `go build`.** Component costs measured
+directly on this machine and toolchain:
 
-**`defaults` mode is what you actually experience**, and it is not close.
-Both of xgo's advantages there are honest, reproducible configuration
-choices, and both are things a wgo or air user could adopt — xgo's claim is
-that you get them without having to know to ask.
+| Phase | Cost |
+|---|---:|
+| xgo's own startup (config, watcher walk, fingerprint priming) | ~10 ms |
+| stop old process + fork/exec new one | ~10 ms |
+| launching an already-built binary to READY | ~3 ms |
+| `go build`, output present and unchanged (fast path) | 58 ms |
+| `go build`, output absent (full link) | 386 ms |
+| `go build -ldflags="-s -w"`, output absent | 308 ms |
 
-**Cold start is where the artifact lifecycle matters.** `go build -o X`
-only takes its up-to-date fast path when `X` already exists; if it has to
-link from scratch it costs roughly 2.4x as much. xgo and air both used to
-delete their build output on exit (air still does, via `clean_on_exit`),
-which meant paying a full re-link on every single start. That is the whole
-explanation for air's ~330-342ms against wgo's and xgo's ~150ms.
+A rebuild always relinks — the source changed, so the fast path cannot
+apply — which is why rebuild latency sits near the link cost plus debounce,
+and why the only large levers are linking less (P1's stripping flags) or
+not building at all.
+
+**Cold start is about the artifact lifecycle.** `go build -o X` only takes
+its fast path when `X` already exists; otherwise it links from scratch at
+~6.6x the cost. xgo and air both used to delete their build output on exit
+(air still does, via `clean_on_exit`), paying a full re-link on every start.
+That is the entire explanation for air's ~295ms against xgo's and wgo's
+~65ms. It also shows up inside each tool's own trial series: trial 1 costs
+~200-283ms for xgo and wgo (nothing built yet), then every subsequent trial
+drops to ~65ms — while air stays at ~290ms for all eight.
 
 **Memory: wgo leanest, consistently.** wgo's supervisor process idles at
 ~4.1 MiB against xgo's ~10.9 MiB and air's ~15.9 MiB. Reducing xgo's
 supervisor footprint is open work.
 
+## Toolchain note (read before comparing to your own shell)
+
+These numbers were produced with `go` resolving **directly** to the
+go1.25.13 toolchain. That matters more than it sounds: the harness is
+launched via `go run .`, and the go command prepends its resolved
+toolchain's `bin` to `PATH` for child processes. So every tool it launches
+gets a `go` that needs no toolchain re-exec.
+
+If your `PATH` `go` is an older release than your `go.mod` requires, every
+build additionally pays a re-exec into the newer toolchain. On this machine
+that costs about **100ms per build** (a fast-path build measures 58ms when
+invoked directly against the 1.25.13 toolchain, versus ~155ms through a
+1.21.13 `go` that has to re-exec).
+
+This does not bias the comparison — all three tools are launched identically
+by the same harness and get the same environment — but it does mean the
+absolute latencies here are a floor rather than what you will see in a shell
+whose primary `go` is older. Installing the toolchain your `go.mod` targets
+as your primary `go` is worth more per build than any config flag in this
+report.
+
 ## What changed since the previous run
 
-The previous version of this report showed xgo cold-starting at ~630ms
-against wgo's ~240ms, and flagged the cause as "observed, not root-caused."
-It has since been root-caused and fixed: xgo deleted its own build output
-on exit, so every run paid a full re-link. Removing that deletion moved
-cold start from 630ms to 234ms in a controlled A/B on the same machine, and
-it now measures ~150ms here.
+Two changes, in order.
 
-Absolute numbers across the whole table are also lower than the previous
-run — `fair`-mode rebuild latency is ~550ms here versus ~820ms before, for
-all three tools including the two that did not change. That is background
-system load, not a code change, and it is precisely why this report was
-regenerated end-to-end rather than having new xgo numbers spliced into old
-ones. Compare within a run, never across runs.
+**xgo stopped deleting its build output on exit.** The previous report
+showed xgo cold-starting at ~630ms against wgo's ~240ms and flagged the
+cause as "observed, not root-caused." Root cause: xgo deleted `tmp/xgo-app`
+on exit, so every run paid a full re-link. Removing that moved cold start
+from 630ms to 234ms in a controlled A/B on the same toolchain.
+
+**The project moved from Go 1.23.0 to go1.25.13.** That is worth its own
+comparison, since the compiler is ~95% of every measured cycle. Rebuild
+latency, median ms, same machine, same code:
+
+| | 1.23.0 | 1.25.13 | change |
+|---|---:|---:|---:|
+| xgo, defaults, minimal | 340.0 | 296.7 | −12.8% |
+| xgo, defaults, realistic | 342.9 | 299.7 | −12.6% |
+| wgo, defaults, minimal | 628.8 | 596.4 | −5.1% |
+| air, defaults, minimal | 1322.7 | 1297.4 | −1.9% |
+| xgo, fair, minimal | 562.8 | 513.6 | −8.7% |
+| wgo, fair, minimal | 549.7 | 496.6 | −9.7% |
+| air, fair, minimal | 559.6 | 496.7 | −11.2% |
+
+Cold start improved far more dramatically for the two tools that keep their
+binary — xgo 150→66ms and wgo 149→63ms, roughly 2.3x — because Go 1.25's
+up-to-date fast path got much cheaper (265ms → 58ms). air, which re-links
+every start, improved only 330→292ms. The compiler upgrade therefore widened
+xgo's `defaults`-mode lead: 1.85x → 2.0x over wgo, and 3.9x → 4.4x over air.
+
+Compare within a run, never across runs — background load moves absolute
+numbers substantially, which is why the whole table is regenerated rather
+than having individual rows updated.
 
 ## A note on the CPU metric
 
 Average CPU% structurally penalizes whichever tool is fastest: the same
-compiler work compressed into a shorter window reads as a higher
-percentage. air's 18.6% is not efficiency, it is a 1000ms delay. **Total
-CPU-seconds per edit-to-ready cycle** would be the honest metric, and the
-harness already reads cumulative ticks from `/proc`, so it is a subtraction
-rather than a rate. Treat the CPU column here as directional only.
+compiler work compressed into a shorter window reads as a higher percentage.
+air's 25.6% is not efficiency, it is a 1000ms delay. **Total CPU-seconds per
+edit-to-ready cycle** would be the honest metric, and the harness already
+reads cumulative ticks from `/proc`, so it is a subtraction rather than a
+rate. Treat the CPU column as directional only.
 
 ## Limitations
 
-- **Single machine, single run.** Reproducible on this exact machine via
-  the command above, not claimed as universally representative.
+- **Single machine, single run.** Reproducible on this exact machine via the
+  command above, not claimed as universally representative.
 - **Linux only.** The harness relies on `/proc` and Unix process groups.
 - **Small apps only.** Both scenarios are small enough that `go build` is
   fast. A large monorepo with a multi-second build would compress the
@@ -207,11 +254,9 @@ rather than a rate. Treat the CPU column here as directional only.
   longer total — untested here.
 - **The `defaults` finding is a config-shipping decision**, not a claim
   about which engine is better. `fair` mode is the architecture comparison,
-  and it is a tie.
-- **A known bug affected data collection.** During this run, xgo
-  intermittently leaked its app process on shutdown (orphaned, still
-  holding its port), which caused `bind: address already in use` failures on
-  subsequent trials. Affected combinations were re-run after clearing
-  strays, and every number reported above comes from a clean run with zero
-  failures — but the underlying bug is real and unfixed, and it is being
-  tracked separately.
+  and there xgo is marginally *behind*.
+- **A known bug affected data collection.** xgo intermittently leaks its app
+  process on shutdown (orphaned, still holding its port), causing
+  `bind: address already in use` on subsequent trials. Affected combinations
+  were re-run after clearing strays, and every number above comes from a
+  clean run with zero failures — but the bug is real and unfixed.
