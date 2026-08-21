@@ -5,11 +5,11 @@ watch:
   debounce: 200ms
 
 build:
-  cmd: "go build -o ./tmp/xgo-app ."
+  cmd: "go build -o ./tmp/whack-app ."
   timeout: 30s
 
 run:
-  cmd: "./tmp/xgo-app"
+  cmd: "./tmp/whack-app"
 
 log:
   timestamps: false

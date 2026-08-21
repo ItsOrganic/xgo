@@ -17,12 +17,12 @@ build:
   # -s -w drop the symbol table and DWARF info the reload loop never reads:
   # ~20% faster builds and a ~30% smaller binary. Remove them if you need to
   # attach a debugger.
-  cmd: "go build -ldflags=\"-s -w\" -o ./tmp/xgo-app ."
+  cmd: "go build -ldflags=\"-s -w\" -o ./tmp/whack-app ."
   env: ["CGO_ENABLED=0"]
   timeout: 30s
 
 run:
-  cmd: "./tmp/xgo-app"
+  cmd: "./tmp/whack-app"
   args: ["--port", "8080"]
   env: ["PORT=8080", "ENV=development"]
   before: ["go generate ./..."]
@@ -35,22 +35,22 @@ extra_cmds:
 log:
   timestamps: true
   color: true
-  prefix: "[xgo]"
+  prefix: "[whack]"
 `
 
 func newInitCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "init",
-		Short: "Create starter xgo.yaml in current directory",
+		Short: "Create starter whack.yaml in current directory",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			path := "xgo.yaml"
+			path := "whack.yaml"
 			if _, err := os.Stat(path); err == nil {
 				return fmt.Errorf("%s already exists", path)
 			}
 			if err := os.WriteFile(path, []byte(starterConfig), 0o644); err != nil {
 				return fmt.Errorf("write starter config: %w", err)
 			}
-			fmt.Fprintln(cmd.OutOrStdout(), "created xgo.yaml")
+			fmt.Fprintln(cmd.OutOrStdout(), "created whack.yaml")
 			return nil
 		},
 	}

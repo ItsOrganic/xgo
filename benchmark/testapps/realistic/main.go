@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"xgobench/testapps/realistic/pkgd"
+	"whackbench/testapps/realistic/pkgd"
 )
 
 // realistic is the ~5-package scenario: closer to real-world build times

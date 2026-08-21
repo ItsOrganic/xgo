@@ -36,7 +36,7 @@ func forceKill(proc *os.Process, groupID int) error {
 }
 
 // IsAlive reports whether pid refers to a currently-running process. Used by
-// `xgo status` to tell a live run apart from stale leftover state.
+// `whack status` to tell a live run apart from stale leftover state.
 func IsAlive(pid int) bool {
 	if pid <= 0 {
 		return false

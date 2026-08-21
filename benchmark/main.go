@@ -1,4 +1,4 @@
-// Command xgobench benchmarks xgo against wgo and air: rebuild latency,
+// Command whackbench benchmarks whack against wgo and air: rebuild latency,
 // cold-start latency, and resource usage, across a minimal and a realistic
 // test app, in both a fair (equal debounce) and defaults (each tool's own
 // out-of-the-box debounce) mode. Run from the benchmark/ directory:
@@ -18,7 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"xgobench/harness"
+	"whackbench/harness"
 )
 
 var readyTimeouts = map[string]time.Duration{
@@ -27,7 +27,7 @@ var readyTimeouts = map[string]time.Duration{
 }
 
 func main() {
-	toolsFlag := flag.String("tool", "all", "Comma-separated tools to benchmark: xgo,wgo,air or \"all\"")
+	toolsFlag := flag.String("tool", "all", "Comma-separated tools to benchmark: whack,wgo,air or \"all\"")
 	scenarioFlag := flag.String("scenario", "all", "Comma-separated scenarios: minimal,realistic or \"all\"")
 	modeFlag := flag.String("mode", "all", "Comma-separated modes: fair (equal debounce across tools),defaults (each tool's own out-of-the-box debounce) or \"all\"")
 	resultsPath := flag.String("results", "results.json", "Path to the results JSON file")
@@ -38,7 +38,7 @@ func main() {
 	startupWarmup := flag.Int("startup-warmup", 1, "Cold-start trials discarded as warmup")
 	editGap := flag.Duration("edit-gap", 400*time.Millisecond, "Gap between simulated edits (must clear every tool's debounce window)")
 	sampleInterval := flag.Duration("sample-interval", 200*time.Millisecond, "Resource sampling interval during the rebuild-latency loop")
-	xgoBinFlag := flag.String("xgo-bin", "", "Path to a pre-built xgo binary (default: build fresh from ..)")
+	whackBinFlag := flag.String("whack-bin", "", "Path to a pre-built whack binary (default: build fresh from ..)")
 	wgoBinFlag := flag.String("wgo-bin", "", "Path to the wgo binary (default: look up on PATH, then $HOME/go/bin/wgo)")
 	airBinFlag := flag.String("air-bin", "", "Path to the air binary (default: look up on PATH, then $HOME/go/bin/air)")
 	flag.Parse()
@@ -47,13 +47,13 @@ func main() {
 		log.Fatalf("must be run from the benchmark/ directory (testapps/ not found here): %v", err)
 	}
 
-	tools := splitOrAll(*toolsFlag, []string{"xgo", "wgo", "air"})
+	tools := splitOrAll(*toolsFlag, []string{"whack", "wgo", "air"})
 	scenarios := splitOrAll(*scenarioFlag, []string{"minimal", "realistic"})
 	modes := splitOrAll(*modeFlag, []string{"fair", "defaults"})
 
-	xgoBin, err := resolveXgoBin(*xgoBinFlag)
+	whackBin, err := resolveWhackBin(*whackBinFlag)
 	if err != nil {
-		log.Fatalf("resolve xgo binary: %v", err)
+		log.Fatalf("resolve whack binary: %v", err)
 	}
 	wgoBin, err := resolveBin(*wgoBinFlag, "wgo")
 	if err != nil {
@@ -63,7 +63,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("resolve air binary: %v", err)
 	}
-	log.Printf("using xgo=%s wgo=%s air=%s", xgoBin, wgoBin, airBin)
+	log.Printf("using whack=%s wgo=%s air=%s", whackBin, wgoBin, airBin)
 
 	resultSet, err := harness.LoadResultSet(*resultsPath)
 	if err != nil {
@@ -87,7 +87,7 @@ func main() {
 				}
 
 				log.Printf("[%s] starting", tag)
-				spec, err := buildToolSpec(tool, scenario, mode, scenarioDir, xgoBin, wgoBin, airBin)
+				spec, err := buildToolSpec(tool, scenario, mode, scenarioDir, whackBin, wgoBin, airBin)
 				if err != nil {
 					log.Fatalf("[%s] build tool spec: %v", tag, err)
 				}
@@ -173,14 +173,14 @@ func splitOrAll(flagVal string, all []string) []string {
 	return out
 }
 
-// resolveXgoBin builds a fresh xgo binary from the repo root (one directory
+// resolveWhackBin builds a fresh whack binary from the repo root (one directory
 // up from benchmark/) unless an existing binary path was given, so the
 // benchmark always measures the current source, not a stale local install.
-func resolveXgoBin(explicit string) (string, error) {
+func resolveWhackBin(explicit string) (string, error) {
 	if explicit != "" {
 		return filepath.Abs(explicit)
 	}
-	out, err := filepath.Abs(filepath.Join(os.TempDir(), "xgobench-xgo-bin"))
+	out, err := filepath.Abs(filepath.Join(os.TempDir(), "whackbench-whack-bin"))
 	if err != nil {
 		return "", err
 	}
@@ -189,7 +189,7 @@ func resolveXgoBin(explicit string) (string, error) {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("go build xgo from repo root: %w", err)
+		return "", fmt.Errorf("go build whack from repo root: %w", err)
 	}
 	return out, nil
 }
@@ -218,10 +218,10 @@ func resolveBin(explicit, name string) (string, error) {
 // buildToolSpec constructs the launch command for tool/scenario/mode. In
 // "fair" mode every tool is forced to the same 200ms debounce/delay, to
 // isolate each tool's own architectural overhead. In "defaults" mode each
-// tool is left at its own out-of-the-box debounce/delay - xgo 50ms, wgo
+// tool is left at its own out-of-the-box debounce/delay - whack 50ms, wgo
 // 300ms, air 1000ms - since that's what a user actually feels day to day
 // without tuning anything.
-func buildToolSpec(tool, scenario, mode, scenarioDir, xgoBin, wgoBin, airBin string) (harness.ToolSpec, error) {
+func buildToolSpec(tool, scenario, mode, scenarioDir, whackBin, wgoBin, airBin string) (harness.ToolSpec, error) {
 	configsDir, err := filepath.Abs("configs")
 	if err != nil {
 		return harness.ToolSpec{}, err
@@ -232,12 +232,12 @@ func buildToolSpec(tool, scenario, mode, scenarioDir, xgoBin, wgoBin, airBin str
 	}
 
 	switch tool {
-	case "xgo":
-		cfgPath := filepath.Join(configsDir, "xgo-"+scenario+suffix+".yaml")
+	case "whack":
+		cfgPath := filepath.Join(configsDir, "whack-"+scenario+suffix+".yaml")
 		return harness.ToolSpec{
-			Name: "xgo",
+			Name: "whack",
 			NewCmd: func() *exec.Cmd {
-				cmd := exec.Command(xgoBin, "run", "--config", cfgPath)
+				cmd := exec.Command(whackBin, "run", "--config", cfgPath)
 				cmd.Dir = scenarioDir
 				return cmd
 			},
@@ -253,7 +253,7 @@ func buildToolSpec(tool, scenario, mode, scenarioDir, xgoBin, wgoBin, airBin str
 			},
 		}, nil
 	case "wgo":
-		// wgo has no config file, so these flags mirror xgo/air's
+		// wgo has no config file, so these flags mirror whack/air's
 		// include/exclude settings directly. In "defaults" mode -debounce is
 		// omitted entirely so wgo falls back to its own built-in 300ms.
 		args := []string{"-file", ".go", "-xdir", "tmp"}
@@ -270,6 +270,6 @@ func buildToolSpec(tool, scenario, mode, scenarioDir, xgoBin, wgoBin, airBin str
 			},
 		}, nil
 	default:
-		return harness.ToolSpec{}, fmt.Errorf("unknown tool %q (want xgo, wgo, or air)", tool)
+		return harness.ToolSpec{}, fmt.Errorf("unknown tool %q (want whack, wgo, or air)", tool)
 	}
 }

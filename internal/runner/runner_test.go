@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ItsOrganic/xgo/internal/debouncer"
-	"github.com/ItsOrganic/xgo/internal/logger"
+	"github.com/ItsOrganic/whack/internal/debouncer"
+	"github.com/ItsOrganic/whack/internal/logger"
 )
 
 // writeScript writes an executable shell script and returns its path. Tests
