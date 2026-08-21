@@ -23,7 +23,7 @@ func TestAdd_PersistsAndReloads(t *testing.T) {
 	}
 
 	want := ToolResult{
-		Tool:                "xgo",
+		Tool:                "whack",
 		Scenario:            "minimal",
 		RebuildLatencyMsRaw: []float64{10, 12, 11},
 		RebuildLatencyMs:    Summarize([]float64{10, 12, 11}),
@@ -55,22 +55,22 @@ func TestHas_ResumeLookup(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if rs.Has("xgo", "minimal", "fair") {
+	if rs.Has("whack", "minimal", "fair") {
 		t.Fatal("Has should be false before any Add")
 	}
-	if err := rs.Add(ToolResult{Tool: "xgo", Scenario: "minimal", Mode: "fair"}); err != nil {
+	if err := rs.Add(ToolResult{Tool: "whack", Scenario: "minimal", Mode: "fair"}); err != nil {
 		t.Fatal(err)
 	}
-	if !rs.Has("xgo", "minimal", "fair") {
+	if !rs.Has("whack", "minimal", "fair") {
 		t.Error("Has should be true after Add for the same triple")
 	}
-	if rs.Has("xgo", "realistic", "fair") {
+	if rs.Has("whack", "realistic", "fair") {
 		t.Error("Has should be false for a different scenario of the same tool")
 	}
 	if rs.Has("air", "minimal", "fair") {
 		t.Error("Has should be false for a different tool of the same scenario")
 	}
-	if rs.Has("xgo", "minimal", "defaults") {
+	if rs.Has("whack", "minimal", "defaults") {
 		t.Error("Has should be false for a different mode of the same tool/scenario")
 	}
 }
@@ -82,10 +82,10 @@ func TestAdd_SameKeyOverwritesInsteadOfDuplicating(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := rs.Add(ToolResult{Tool: "xgo", Scenario: "minimal", Mode: "fair", AvgMemoryKiB: 100}); err != nil {
+	if err := rs.Add(ToolResult{Tool: "whack", Scenario: "minimal", Mode: "fair", AvgMemoryKiB: 100}); err != nil {
 		t.Fatal(err)
 	}
-	if err := rs.Add(ToolResult{Tool: "xgo", Scenario: "minimal", Mode: "fair", AvgMemoryKiB: 200}); err != nil {
+	if err := rs.Add(ToolResult{Tool: "whack", Scenario: "minimal", Mode: "fair", AvgMemoryKiB: 200}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -106,10 +106,10 @@ func TestAdd_DifferentModeSameToolScenarioDoesNotOverwrite(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := rs.Add(ToolResult{Tool: "xgo", Scenario: "minimal", Mode: "fair"}); err != nil {
+	if err := rs.Add(ToolResult{Tool: "whack", Scenario: "minimal", Mode: "fair"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := rs.Add(ToolResult{Tool: "xgo", Scenario: "minimal", Mode: "defaults"}); err != nil {
+	if err := rs.Add(ToolResult{Tool: "whack", Scenario: "minimal", Mode: "defaults"}); err != nil {
 		t.Fatal(err)
 	}
 	if len(rs.Results) != 2 {

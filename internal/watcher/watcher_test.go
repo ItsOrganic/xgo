@@ -34,7 +34,7 @@ func drain(events <-chan FileEvent, errs <-chan error, timeout time.Duration) {
 
 func TestNew_WatchesTheConfiguredDirectory(t *testing.T) {
 	dir := t.TempDir()
-	w, err := New(Options{Dirs: []string{"."}, Includes: []string{"*.go"}, OutputBinary: "tmp/xgo-app", WorkingDir: dir})
+	w, err := New(Options{Dirs: []string{"."}, Includes: []string{"*.go"}, OutputBinary: "tmp/whack-app", WorkingDir: dir})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -56,7 +56,7 @@ func TestNew_UnderPathContainingExcludedSubstring(t *testing.T) {
 	// be watched - the exclude check must be relative to the project root,
 	// not the absolute path.
 	dir := t.TempDir() // typically something like /tmp/TestXxx.../001
-	w, err := New(Options{Dirs: []string{"."}, Includes: []string{"*.go"}, OutputBinary: "tmp/xgo-app", WorkingDir: dir})
+	w, err := New(Options{Dirs: []string{"."}, Includes: []string{"*.go"}, OutputBinary: "tmp/whack-app", WorkingDir: dir})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -81,7 +81,7 @@ func TestWatcher_DetectsEditAfterDirDeleteAndRecreate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	w, err := New(Options{Dirs: []string{"."}, Includes: []string{"*.go"}, OutputBinary: "tmp/xgo-app", WorkingDir: dir})
+	w, err := New(Options{Dirs: []string{"."}, Includes: []string{"*.go"}, OutputBinary: "tmp/whack-app", WorkingDir: dir})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -123,7 +123,7 @@ func TestWatcher_DetectsEditAfterDirDeleteAndRecreate(t *testing.T) {
 
 func TestShouldEmit_IgnoresChmodButNotContentChanges(t *testing.T) {
 	dir := t.TempDir()
-	w, err := New(Options{Dirs: []string{"."}, Includes: []string{"*.go"}, OutputBinary: "tmp/xgo-app", WorkingDir: dir})
+	w, err := New(Options{Dirs: []string{"."}, Includes: []string{"*.go"}, OutputBinary: "tmp/whack-app", WorkingDir: dir})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

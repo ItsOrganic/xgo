@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ItsOrganic/xgo/internal/pathmatch"
+	"github.com/ItsOrganic/whack/internal/pathmatch"
 	"github.com/fsnotify/fsnotify"
 )
 

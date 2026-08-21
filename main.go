@@ -8,7 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/ItsOrganic/xgo/cmd"
+	"github.com/ItsOrganic/whack/cmd"
 )
 
 func main() {
@@ -21,7 +21,7 @@ func main() {
 	}
 
 	// The compiled app is deliberately left in tmp/ on exit. Deleting it
-	// used to cost every subsequent `xgo run` a full re-link, since
+	// used to cost every subsequent `whack run` a full re-link, since
 	// `go build -o X` only takes its fast path when X already exists:
 	// measured 630ms cold start with the deletion vs 234ms without it, on
 	// benchmark/testapps/minimal. tmp/ is gitignored (see

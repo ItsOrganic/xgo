@@ -2,12 +2,12 @@ tmp/
 .private/
 
 # build artifacts
-xgo
-xgo.exe
+whack
+whack.exe
 /dist/
 
-# local, user-specific config (xgo.yaml.example is the template that IS tracked)
-xgo.yaml
+# local, user-specific config (whack.yaml.example is the template that IS tracked)
+whack.yaml
 
 # OS / editor cruft
 .DS_Store

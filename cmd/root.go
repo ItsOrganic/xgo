@@ -17,11 +17,12 @@ type rootOptions struct {
 func NewRootCmd() *cobra.Command {
 	opts := &rootOptions{}
 	root := &cobra.Command{
-		Use:   "xgo",
-		Short: "xgo is a production-grade Go hot reloader",
+		Use:     "whack",
+		Short:   "whack is a production-grade Go hot reloader",
+		Version: Version,
 	}
 
-	root.PersistentFlags().StringVar(&opts.cfgFile, "config", "xgo.yaml", "Config file path")
+	root.PersistentFlags().StringVar(&opts.cfgFile, "config", "whack.yaml", "Config file path")
 	root.PersistentFlags().BoolVar(&opts.noColor, "no-color", false, "Disable colored output")
 	root.PersistentFlags().BoolVar(&opts.timestamps, "timestamps", false, "Show timestamps in logs")
 
