@@ -67,7 +67,7 @@ func TestLoad_ValidFile_OverridesDefaults(t *testing.T) {
 		t.Errorf("build.cmd override not applied: got %q", cfg.Build.Cmd)
 	}
 	// Untouched fields should still carry their defaults.
-	if cfg.Run.Cmd != "./tmp/xgo-app" {
+	if cfg.Run.Cmd != DefaultRunCmd {
 		t.Errorf("unrelated default was clobbered: run.cmd = %q", cfg.Run.Cmd)
 	}
 }
@@ -158,5 +158,21 @@ func TestApplyDefaults_ZeroMeansUnsetNegativeIsPreserved(t *testing.T) {
 	applyDefaults(&cfg)
 	if cfg.Watch.Debounce != -5*time.Millisecond {
 		t.Errorf("a negative debounce must be left alone by applyDefaults so Validate can catch it, got %v", cfg.Watch.Debounce)
+	}
+}
+
+func TestDefaultBinaryPaths_PerOS(t *testing.T) {
+	cases := []struct{ goos, output, run string }{
+		{"linux", "tmp/xgo-app", "./tmp/xgo-app"},
+		{"darwin", "tmp/xgo-app", "./tmp/xgo-app"},
+		{"windows", "tmp/xgo-app.exe", `tmp\xgo-app.exe`},
+	}
+	for _, c := range cases {
+		if got := outputBinaryFor(c.goos); got != c.output {
+			t.Errorf("outputBinaryFor(%q) = %q, want %q", c.goos, got, c.output)
+		}
+		if got := runCmdFor(c.goos); got != c.run {
+			t.Errorf("runCmdFor(%q) = %q, want %q", c.goos, got, c.run)
+		}
 	}
 }

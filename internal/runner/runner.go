@@ -430,7 +430,10 @@ func mergeEnv(base, extra []string) []string {
 // as-is here rather than risked in the same change as the Unix fix.
 func shellCommandContext(ctx context.Context, raw string, args ...string) *exec.Cmd {
 	if isWindows() {
-		return exec.CommandContext(ctx, "cmd", "/C", withArgs(raw, args))
+		line := withArgs(raw, args)
+		cmd := exec.CommandContext(ctx, "cmd", "/S", "/C", line)
+		setVerbatimCmdLine(cmd, `cmd /S /C "`+line+`"`)
+		return cmd
 	}
 	if len(args) == 0 {
 		return exec.CommandContext(ctx, "sh", "-c", raw)
@@ -467,7 +470,12 @@ func terminateProcess(ctx context.Context, p *processInfo, timeout time.Duration
 	}
 	p.stopping.Store(true)
 	if err := sendTerminate(p.cmd.Process, p.group); err != nil {
-		return err
+		// A failed graceful stop must not leave the old process running
+		// alongside its replacement - escalate instead of giving up.
+		if kerr := forceKill(p.cmd.Process, p.group); kerr != nil {
+			return errors.Join(err, kerr)
+		}
+		return nil
 	}
 
 	select {

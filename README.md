@@ -197,6 +197,11 @@ before you spend time wondering why saves aren't triggering rebuilds.
 
 - `tmp/` is auto-added to `.gitignore` if missing.
 - Runtime status is stored in `tmp/xgo-status.yaml`.
+- On Windows, the default binary is `tmp\xgo-app.exe` and commands run
+  under `cmd.exe`. xgo stops your app by sending Ctrl+Break, which a Go
+  program receives as `os.Interrupt`, so listen for that (not only
+  `syscall.SIGTERM`) to shut down gracefully. Anything still running after
+  the timeout is killed along with its child processes.
 - The compiled binary is left in `tmp/` on exit, on purpose. `go build -o X`
   only takes its up-to-date fast path when `X` already exists, so deleting
   it would cost the next `xgo run` a full re-link — measured at 630ms vs

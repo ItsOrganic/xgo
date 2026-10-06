@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -91,8 +92,32 @@ type Overrides struct {
 // attach delve, say) just drops the flags from their own config.
 const DefaultBuildFlags = `-ldflags="-s -w"`
 
+// DefaultOutputBinary is where xgo's generated build command writes the app,
+// relative to the project root. Windows needs the .exe suffix: `go build -o`
+// writes exactly the name it is given, and cmd.exe won't run a file without
+// an executable extension.
+var DefaultOutputBinary = outputBinaryFor(runtime.GOOS)
+
+// DefaultRunCmd runs DefaultOutputBinary. On Windows it is a backslash path,
+// since cmd.exe parses the "/tmp" in "./tmp/xgo-app" as a command switch.
+var DefaultRunCmd = runCmdFor(runtime.GOOS)
+
 // DefaultBuildCmd is the build command used when the config doesn't set one.
-const DefaultBuildCmd = `go build ` + DefaultBuildFlags + ` -o ./tmp/xgo-app .`
+var DefaultBuildCmd = `go build ` + DefaultBuildFlags + ` -o ` + DefaultRunCmd + ` .`
+
+func outputBinaryFor(goos string) string {
+	if goos == "windows" {
+		return "tmp/xgo-app.exe"
+	}
+	return "tmp/xgo-app"
+}
+
+func runCmdFor(goos string) string {
+	if goos == "windows" {
+		return `tmp\xgo-app.exe`
+	}
+	return "./" + outputBinaryFor(goos)
+}
 
 // DefaultConfig returns sensible defaults.
 func DefaultConfig() Config {
@@ -108,7 +133,7 @@ func DefaultConfig() Config {
 			Timeout: 30 * time.Second,
 		},
 		Run: RunConfig{
-			Cmd: "./tmp/xgo-app",
+			Cmd: DefaultRunCmd,
 		},
 		Log: LogConfig{
 			Timestamps: false,
@@ -230,7 +255,7 @@ func applyDefaults(cfg *Config) {
 		cfg.Build.Timeout = 30 * time.Second
 	}
 	if strings.TrimSpace(cfg.Run.Cmd) == "" {
-		cfg.Run.Cmd = "./tmp/xgo-app"
+		cfg.Run.Cmd = DefaultRunCmd
 	}
 	if strings.TrimSpace(cfg.Log.Prefix) == "" {
 		cfg.Log.Prefix = "[xgo]"
