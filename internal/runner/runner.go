@@ -16,8 +16,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ItsOrganic/whack/internal/debouncer"
-	"github.com/ItsOrganic/whack/internal/logger"
+	"github.com/ItsOrganic/xgo/internal/debouncer"
+	"github.com/ItsOrganic/xgo/internal/logger"
 )
 
 // CommandSpec describes a command started by the runner.

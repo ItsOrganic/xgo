@@ -10,12 +10,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ItsOrganic/whack/internal/config"
-	"github.com/ItsOrganic/whack/internal/debouncer"
-	"github.com/ItsOrganic/whack/internal/logger"
-	"github.com/ItsOrganic/whack/internal/pathmatch"
-	"github.com/ItsOrganic/whack/internal/runner"
-	"github.com/ItsOrganic/whack/internal/watcher"
+	"github.com/ItsOrganic/xgo/internal/config"
+	"github.com/ItsOrganic/xgo/internal/debouncer"
+	"github.com/ItsOrganic/xgo/internal/logger"
+	"github.com/ItsOrganic/xgo/internal/pathmatch"
+	"github.com/ItsOrganic/xgo/internal/runner"
+	"github.com/ItsOrganic/xgo/internal/watcher"
 
 	"github.com/spf13/cobra"
 )
@@ -37,7 +37,7 @@ func newRunCmd(opts *rootOptions) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "run [flags] [build-target] [-- app-args]",
-		Short: "Run whack hot reloader",
+		Short: "Run xgo hot reloader",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			wd, err := os.Getwd()
 			if err != nil {
@@ -94,7 +94,7 @@ func newRunCmd(opts *rootOptions) *cobra.Command {
 			}
 			config.MergeOverrides(&cfg, ovr)
 			if inferredBuildTarget != "" {
-				cfg.Build.Cmd = fmt.Sprintf("go build %s -o ./tmp/whack-app %s", config.DefaultBuildFlags, shellQuote(inferredBuildTarget))
+				cfg.Build.Cmd = fmt.Sprintf("go build %s -o ./tmp/xgo-app %s", config.DefaultBuildFlags, shellQuote(inferredBuildTarget))
 			}
 			if err := config.Validate(cfg); err != nil {
 				return err
@@ -122,7 +122,7 @@ func newRunCmd(opts *rootOptions) *cobra.Command {
 				Excludes:     cfg.Watch.Exclude,
 				Gitignore:    gitignore,
 				Verbose:      verbose,
-				OutputBinary: "tmp/whack-app",
+				OutputBinary: "tmp/xgo-app",
 				WorkingDir:   wd,
 			})
 			if err != nil {
@@ -188,7 +188,7 @@ func newRunCmd(opts *rootOptions) *cobra.Command {
 				Main:          runSpec,
 				Extra:         extra,
 				WorkingDir:    wd,
-				OutputBinary:  "tmp/whack-app",
+				OutputBinary:  "tmp/xgo-app",
 				Logger:        log,
 				SignalTimeout: 5 * time.Second,
 			})

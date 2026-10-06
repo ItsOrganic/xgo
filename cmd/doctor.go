@@ -9,14 +9,14 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ItsOrganic/whack/internal/config"
-	"github.com/ItsOrganic/whack/internal/pathmatch"
-	"github.com/ItsOrganic/whack/internal/watcher"
+	"github.com/ItsOrganic/xgo/internal/config"
+	"github.com/ItsOrganic/xgo/internal/pathmatch"
+	"github.com/ItsOrganic/xgo/internal/watcher"
 
 	"github.com/spf13/cobra"
 )
 
-// doctorCheck is one line of a `whack doctor` report. ok+warn both false means
+// doctorCheck is one line of a `xgo doctor` report. ok+warn both false means
 // a blocking failure; warn true (with ok false) means advisory-only.
 type doctorCheck struct {
 	name string
@@ -26,7 +26,7 @@ type doctorCheck struct {
 }
 
 // newDoctorCmd validates config + watch setup before committing to a
-// long-running `whack run` session. It exists specifically to catch, up front,
+// long-running `xgo run` session. It exists specifically to catch, up front,
 // the class of bug this project shipped early on: a watcher that silently
 // registers zero directories, so file changes never trigger a rebuild and
 // nothing about the running tool looks wrong until you notice a save didn't
@@ -34,7 +34,7 @@ type doctorCheck struct {
 func newDoctorCmd(opts *rootOptions) *cobra.Command {
 	return &cobra.Command{
 		Use:   "doctor",
-		Short: "Validate whack.yaml and your project's watch/build setup before running whack run",
+		Short: "Validate xgo.yaml and your project's watch/build setup before running xgo run",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			wd, err := os.Getwd()
 			if err != nil {
@@ -49,7 +49,7 @@ func newDoctorCmd(opts *rootOptions) *cobra.Command {
 				printDoctorReport(out, checks)
 				return fmt.Errorf("doctor found blocking issues")
 			}
-			source := "defaults (no whack.yaml found)"
+			source := "defaults (no xgo.yaml found)"
 			if cfg.FoundFile {
 				source = cfg.Path
 			}
@@ -67,7 +67,7 @@ func newDoctorCmd(opts *rootOptions) *cobra.Command {
 				Includes:     cfg.Watch.Include,
 				Excludes:     cfg.Watch.Exclude,
 				Gitignore:    gitignore,
-				OutputBinary: "tmp/whack-app",
+				OutputBinary: "tmp/xgo-app",
 				WorkingDir:   wd,
 			})
 			if err != nil {
@@ -143,7 +143,7 @@ func printDoctorReport(out io.Writer, checks []doctorCheck) (blocking bool) {
 		}
 	}
 	if blocking {
-		fmt.Fprintln(out, "\nBlocking issues found - fix the FAIL lines above before running `whack run`.")
+		fmt.Fprintln(out, "\nBlocking issues found - fix the FAIL lines above before running `xgo run`.")
 	}
 	return blocking
 }

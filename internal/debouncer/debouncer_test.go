@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ItsOrganic/whack/internal/watcher"
+	"github.com/ItsOrganic/xgo/internal/watcher"
 )
 
 func writeFile(t *testing.T, path, content string) {

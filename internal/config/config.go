@@ -12,7 +12,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Config represents whack configuration loaded from whack.yaml and CLI flags.
+// Config represents xgo configuration loaded from xgo.yaml and CLI flags.
 type Config struct {
 	Watch     WatchConfig `yaml:"watch"`
 	Build     BuildConfig `yaml:"build"`
@@ -78,7 +78,7 @@ type Overrides struct {
 	RunArgsAfterD []string
 }
 
-// DefaultBuildFlags are the linker flags whack's own default build command
+// DefaultBuildFlags are the linker flags xgo's own default build command
 // ships with. -s and -w drop the symbol table and DWARF debug info, neither
 // of which the hot-reload loop ever reads. Linking is the single most
 // expensive phase of a rebuild (~350-400ms of a ~640ms cycle), and skipping
@@ -86,13 +86,13 @@ type Overrides struct {
 // 5.15MB of produced binary on benchmark/testapps/minimal, which also
 // lowers the running app's own resident memory.
 //
-// This applies only to the command whack generates for you. An explicit
-// build.cmd in whack.yaml is used verbatim, so anyone who needs symbols (to
+// This applies only to the command xgo generates for you. An explicit
+// build.cmd in xgo.yaml is used verbatim, so anyone who needs symbols (to
 // attach delve, say) just drops the flags from their own config.
 const DefaultBuildFlags = `-ldflags="-s -w"`
 
 // DefaultBuildCmd is the build command used when the config doesn't set one.
-const DefaultBuildCmd = `go build ` + DefaultBuildFlags + ` -o ./tmp/whack-app .`
+const DefaultBuildCmd = `go build ` + DefaultBuildFlags + ` -o ./tmp/xgo-app .`
 
 // DefaultConfig returns sensible defaults.
 func DefaultConfig() Config {
@@ -108,12 +108,12 @@ func DefaultConfig() Config {
 			Timeout: 30 * time.Second,
 		},
 		Run: RunConfig{
-			Cmd: "./tmp/whack-app",
+			Cmd: "./tmp/xgo-app",
 		},
 		Log: LogConfig{
 			Timestamps: false,
 			Color:      true,
-			Prefix:     "[whack]",
+			Prefix:     "[xgo]",
 		},
 	}
 }
@@ -123,7 +123,7 @@ func Load(path string) (Config, error) {
 	cfg := DefaultConfig()
 
 	if path == "" {
-		path = "whack.yaml"
+		path = "xgo.yaml"
 	}
 	absPath, err := filepath.Abs(path)
 	if err != nil {
@@ -230,10 +230,10 @@ func applyDefaults(cfg *Config) {
 		cfg.Build.Timeout = 30 * time.Second
 	}
 	if strings.TrimSpace(cfg.Run.Cmd) == "" {
-		cfg.Run.Cmd = "./tmp/whack-app"
+		cfg.Run.Cmd = "./tmp/xgo-app"
 	}
 	if strings.TrimSpace(cfg.Log.Prefix) == "" {
-		cfg.Log.Prefix = "[whack]"
+		cfg.Log.Prefix = "[xgo]"
 	}
 }
 
