@@ -33,8 +33,8 @@ func TestRootCmd_DefaultConfigIsXgoYAML(t *testing.T) {
 
 // Same hazard: the output binary path lives inside a build-command string.
 func TestDefaultBuildCmd_TargetsXgoApp(t *testing.T) {
-	if !strings.Contains(config.DefaultBuildCmd, "./tmp/xgo-app") {
-		t.Fatalf("DefaultBuildCmd = %q, want it to target ./tmp/xgo-app", config.DefaultBuildCmd)
+	if !strings.Contains(config.DefaultBuildCmd, "-o "+config.DefaultRunCmd+" ") {
+		t.Fatalf("DefaultBuildCmd = %q, want it to target %s", config.DefaultBuildCmd, config.DefaultRunCmd)
 	}
 	if strings.Contains(config.DefaultBuildCmd, "whack") {
 		t.Fatalf("DefaultBuildCmd still mentions whack: %q", config.DefaultBuildCmd)

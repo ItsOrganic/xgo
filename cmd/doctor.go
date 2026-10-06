@@ -67,7 +67,7 @@ func newDoctorCmd(opts *rootOptions) *cobra.Command {
 				Includes:     cfg.Watch.Include,
 				Excludes:     cfg.Watch.Exclude,
 				Gitignore:    gitignore,
-				OutputBinary: "tmp/xgo-app",
+				OutputBinary: config.DefaultOutputBinary,
 				WorkingDir:   wd,
 			})
 			if err != nil {

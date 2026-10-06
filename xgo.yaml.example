@@ -8,6 +8,8 @@ build:
   # -s -w drop the symbol table and DWARF info the reload loop never reads:
   # ~20% faster builds and a ~30% smaller binary. Remove them if you need to
   # attach a debugger.
+  # On Windows the binary is tmp\xgo-app.exe - in these double-quoted strings,
+  # write it as "tmp\\xgo-app.exe". `xgo init` writes the right paths for your OS.
   cmd: "go build -ldflags=\"-s -w\" -o ./tmp/xgo-app ."
   env: ["CGO_ENABLED=0"]
   timeout: 30s

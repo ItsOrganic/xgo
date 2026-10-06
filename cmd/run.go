@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"syscall"
@@ -94,7 +95,7 @@ func newRunCmd(opts *rootOptions) *cobra.Command {
 			}
 			config.MergeOverrides(&cfg, ovr)
 			if inferredBuildTarget != "" {
-				cfg.Build.Cmd = fmt.Sprintf("go build %s -o ./tmp/xgo-app %s", config.DefaultBuildFlags, shellQuote(inferredBuildTarget))
+				cfg.Build.Cmd = fmt.Sprintf("go build %s -o %s %s", config.DefaultBuildFlags, config.DefaultRunCmd, shellQuote(inferredBuildTarget))
 			}
 			if err := config.Validate(cfg); err != nil {
 				return err
@@ -122,7 +123,7 @@ func newRunCmd(opts *rootOptions) *cobra.Command {
 				Excludes:     cfg.Watch.Exclude,
 				Gitignore:    gitignore,
 				Verbose:      verbose,
-				OutputBinary: "tmp/xgo-app",
+				OutputBinary: config.DefaultOutputBinary,
 				WorkingDir:   wd,
 			})
 			if err != nil {
@@ -188,7 +189,7 @@ func newRunCmd(opts *rootOptions) *cobra.Command {
 				Main:          runSpec,
 				Extra:         extra,
 				WorkingDir:    wd,
-				OutputBinary:  "tmp/xgo-app",
+				OutputBinary:  config.DefaultOutputBinary,
 				Logger:        log,
 				SignalTimeout: 5 * time.Second,
 			})
@@ -325,6 +326,12 @@ func inferBuildTarget(wd, raw string) (string, bool, error) {
 }
 
 func shellQuote(s string) string {
+	// cmd.exe doesn't treat single quotes as quoting; they would reach go
+	// build as part of the path. Go paths can't contain '"', so plain double
+	// quotes are enough there.
+	if runtime.GOOS == "windows" {
+		return `"` + s + `"`
+	}
 	if s == "" {
 		return "''"
 	}

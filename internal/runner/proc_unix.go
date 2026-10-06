@@ -10,6 +10,9 @@ import (
 
 func isWindows() bool { return false }
 
+// setVerbatimCmdLine is Windows-only; Unix passes argv without re-quoting.
+func setVerbatimCmdLine(cmd *exec.Cmd, line string) {}
+
 func applyProcessGroup(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 }

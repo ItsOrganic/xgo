@@ -3,8 +3,12 @@ package runner
 import (
 	"context"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -17,6 +21,9 @@ import (
 // fast and deterministically.
 func writeScript(t *testing.T, dir, name, body string) string {
 	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("uses /bin/sh scripts; TestTerminateProcess_StopsRealApp covers Windows")
+	}
 	p := filepath.Join(dir, name)
 	if err := os.WriteFile(p, []byte("#!/bin/sh\n"+body), 0o755); err != nil {
 		t.Fatalf("write script %s: %v", name, err)
@@ -233,5 +240,72 @@ func TestStartCmd_ArgsWithSpecialCharactersSurviveIntact(t *testing.T) {
 		if got[i] != want[i] {
 			t.Errorf("arg[%d]: got %q, want %q", i, got[i], want[i])
 		}
+	}
+}
+
+// TestHelperApp is not a real test: TestTerminateProcess_StopsRealApp runs
+// the test binary itself as a stand-in app, so stopping is exercised against
+// a real Go program on every OS, Windows included, with no shell scripts.
+func TestHelperApp(t *testing.T) {
+	dir := os.Getenv("XGO_HELPER_DIR")
+	if dir == "" {
+		t.Skip("helper process for TestTerminateProcess_StopsRealApp")
+	}
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
+	_ = os.WriteFile(filepath.Join(dir, "ready"), []byte(strconv.Itoa(os.Getpid())), 0o644)
+	<-sig
+	_ = os.WriteFile(filepath.Join(dir, "stopped"), nil, 0o644)
+	os.Exit(0)
+}
+
+func TestTerminateProcess_StopsRealApp(t *testing.T) {
+	dir := t.TempDir()
+	r := newTestRunner(t, Config{WorkingDir: dir})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	p, err := r.startCmd(ctx, CommandSpec{
+		Name: "app",
+		Cmd:  shellQuote(os.Args[0]) + " -test.run=TestHelperApp",
+		Env:  []string{"XGO_HELPER_DIR=" + dir},
+	})
+	if err != nil {
+		t.Fatalf("start helper app: %v", err)
+	}
+
+	// The app runs under the shell wrapper, so its PID is not p.pid.
+	var appPID int
+	deadline := time.Now().Add(10 * time.Second)
+	for appPID == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("helper app never became ready")
+		}
+		if b, err := os.ReadFile(filepath.Join(dir, "ready")); err == nil {
+			appPID, _ = strconv.Atoi(string(b))
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	if err := terminateProcess(ctx, p, 5*time.Second); err != nil {
+		t.Fatalf("terminateProcess: %v", err)
+	}
+	select {
+	case <-p.done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("shell wrapper still running after terminateProcess")
+	}
+
+	// The bug this guards against: only the wrapper died, and the app kept
+	// running (and holding its port) alongside its replacement.
+	deadline = time.Now().Add(5 * time.Second)
+	for IsAlive(appPID) {
+		if time.Now().After(deadline) {
+			t.Fatalf("app (pid %d) outlived terminateProcess", appPID)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "stopped")); err != nil {
+		t.Error("app was killed instead of being asked to stop gracefully")
 	}
 }
