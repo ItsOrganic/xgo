@@ -11,9 +11,9 @@ func TestExcludedDir_RelativeNotAbsolute(t *testing.T) {
 	// match the exclude pattern against the *absolute* path, so a project
 	// living anywhere under a directory literally containing "tmp" (like the
 	// OS temp dir itself) had its entire root excluded from watching, since
-	// "/tmp/whack-test/" contains the substring "tmp/" regardless of the
+	// "/tmp/xgo-test/" contains the substring "tmp/" regardless of the
 	// project's own structure. The fix relativizes against baseDir first.
-	base := "/tmp/whack-test-project"
+	base := "/tmp/xgo-test-project"
 	m := New(base, []string{"*.go"}, []string{"tmp/", ".git/"}, nil)
 
 	if m.ExcludedDir(base) {

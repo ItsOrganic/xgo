@@ -1,4 +1,4 @@
-module github.com/ItsOrganic/whack
+module github.com/ItsOrganic/xgo
 
 go 1.25
 

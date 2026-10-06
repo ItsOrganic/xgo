@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"strings"
 
-	"whackbench/testapps/realistic/pkga"
-	"whackbench/testapps/realistic/pkgb"
-	"whackbench/testapps/realistic/pkgc"
+	"xgobench/testapps/realistic/pkga"
+	"xgobench/testapps/realistic/pkgb"
+	"xgobench/testapps/realistic/pkgc"
 )
 
 // Service bundles a request cache with the string/math helpers.

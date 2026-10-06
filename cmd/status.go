@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ItsOrganic/whack/internal/runner"
+	"github.com/ItsOrganic/xgo/internal/runner"
 
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -15,7 +15,7 @@ import (
 func newStatusCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
-		Short: "Show whack watch/runtime status",
+		Short: "Show xgo watch/runtime status",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			wd, err := os.Getwd()
 			if err != nil {
@@ -25,7 +25,7 @@ func newStatusCmd() *cobra.Command {
 			data, err := os.ReadFile(path)
 			if err != nil {
 				if os.IsNotExist(err) {
-					fmt.Fprintln(cmd.OutOrStdout(), "No active whack status found. Run `whack run` first.")
+					fmt.Fprintln(cmd.OutOrStdout(), "No active xgo status found. Run `xgo run` first.")
 					return nil
 				}
 				return fmt.Errorf("read status file: %w", err)

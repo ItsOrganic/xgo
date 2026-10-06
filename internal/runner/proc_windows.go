@@ -22,7 +22,7 @@ func forceKill(proc *os.Process, groupID int) error {
 }
 
 // IsAlive reports whether pid refers to a currently-running process. Used by
-// `whack status` to tell a live run apart from stale leftover state.
+// `xgo status` to tell a live run apart from stale leftover state.
 //
 // Unlike Unix, os.FindProcess on Windows actually opens a handle to the
 // process and fails if it doesn't exist, so a successful FindProcess is

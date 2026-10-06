@@ -8,12 +8,12 @@ build:
   # -s -w drop the symbol table and DWARF info the reload loop never reads:
   # ~20% faster builds and a ~30% smaller binary. Remove them if you need to
   # attach a debugger.
-  cmd: "go build -ldflags=\"-s -w\" -o ./tmp/whack-app ."
+  cmd: "go build -ldflags=\"-s -w\" -o ./tmp/xgo-app ."
   env: ["CGO_ENABLED=0"]
   timeout: 30s
 
 run:
-  cmd: "./tmp/whack-app"
+  cmd: "./tmp/xgo-app"
   args: ["--port", "8080"]
   env: ["PORT=8080", "ENV=development"]
   before: ["go generate ./..."]
@@ -26,4 +26,4 @@ extra_cmds:
 log:
   timestamps: true
   color: true
-  prefix: "[whack]"
+  prefix: "[xgo]"

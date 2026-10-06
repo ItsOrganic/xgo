@@ -1,4 +1,4 @@
-module whackbench
+module xgobench
 
 go 1.25
 

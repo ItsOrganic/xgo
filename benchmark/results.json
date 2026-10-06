@@ -1,7 +1,7 @@
 {
   "results": [
     {
-      "tool": "whack",
+      "tool": "xgo",
       "scenario": "minimal",
       "mode": "fair",
       "timestamp": "2026-08-21T20:26:31.296884343+05:30",
@@ -184,7 +184,7 @@
       "avg_cpu_percent": 46.022854090452626
     },
     {
-      "tool": "whack",
+      "tool": "xgo",
       "scenario": "minimal",
       "mode": "defaults",
       "timestamp": "2026-08-21T20:28:16.995387631+05:30",
@@ -367,7 +367,7 @@
       "avg_cpu_percent": 21.607113005196517
     },
     {
-      "tool": "whack",
+      "tool": "xgo",
       "scenario": "realistic",
       "mode": "fair",
       "timestamp": "2026-08-21T20:29:40.497161942+05:30",
@@ -550,7 +550,7 @@
       "avg_cpu_percent": 37.1265208843249
     },
     {
-      "tool": "whack",
+      "tool": "xgo",
       "scenario": "realistic",
       "mode": "defaults",
       "timestamp": "2026-08-21T20:30:40.511930971+05:30",

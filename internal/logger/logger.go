@@ -42,7 +42,7 @@ var paletteAttrs = []color.Attribute{
 // concurrently (as any test creating multiple Loggers found immediately).
 func New(prefix string, timestamps, colorize bool) *Logger {
 	if prefix == "" {
-		prefix = "[whack]"
+		prefix = "[xgo]"
 	}
 	palette := make([]*color.Color, len(paletteAttrs))
 	for i, a := range paletteAttrs {

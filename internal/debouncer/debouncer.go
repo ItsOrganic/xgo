@@ -10,8 +10,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/ItsOrganic/whack/internal/pathmatch"
-	"github.com/ItsOrganic/whack/internal/watcher"
+	"github.com/ItsOrganic/xgo/internal/pathmatch"
+	"github.com/ItsOrganic/xgo/internal/watcher"
 )
 
 // BuildSignal indicates a confirmed source change that should trigger build/restart.
@@ -81,7 +81,7 @@ func (d *Debouncer) Start(ctx context.Context, in <-chan watcher.FileEvent) <-ch
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				fmt.Fprintf(os.Stderr, "[whack] recovered from panic in debouncer: %v\n", r)
+				fmt.Fprintf(os.Stderr, "[xgo] recovered from panic in debouncer: %v\n", r)
 			}
 		}()
 		defer close(out)

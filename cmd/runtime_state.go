@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/ItsOrganic/whack/internal/runner"
+	"github.com/ItsOrganic/xgo/internal/runner"
 
 	"gopkg.in/yaml.v3"
 )
@@ -32,7 +32,7 @@ type runtimeState struct {
 }
 
 func stateFilePath(wd string) string {
-	return filepath.Join(wd, "tmp", "whack-status.yaml")
+	return filepath.Join(wd, "tmp", "xgo-status.yaml")
 }
 
 func writeState(path string, st runtimeState) error {

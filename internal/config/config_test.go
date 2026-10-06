@@ -10,7 +10,7 @@ import (
 
 func TestLoad_NoFile_UsesDefaults(t *testing.T) {
 	dir := t.TempDir()
-	cfg, err := Load(filepath.Join(dir, "whack.yaml"))
+	cfg, err := Load(filepath.Join(dir, "xgo.yaml"))
 	if err != nil {
 		t.Fatalf("Load with no file present must not error: %v", err)
 	}
@@ -32,11 +32,11 @@ func TestLoad_NoFile_UsesDefaults(t *testing.T) {
 }
 
 func TestLoad_UnknownField_IsRejected(t *testing.T) {
-	// Regression test: whack.yaml used to silently ignore unrecognized keys
+	// Regression test: xgo.yaml used to silently ignore unrecognized keys
 	// (e.g. a typo like "debouce" instead of "debounce"), so a config
 	// mistake produced no error and quietly fell back to the default.
 	dir := t.TempDir()
-	path := filepath.Join(dir, "whack.yaml")
+	path := filepath.Join(dir, "xgo.yaml")
 	if err := os.WriteFile(path, []byte("watch:\n  debouce: 100ms\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +48,7 @@ func TestLoad_UnknownField_IsRejected(t *testing.T) {
 
 func TestLoad_ValidFile_OverridesDefaults(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "whack.yaml")
+	path := filepath.Join(dir, "xgo.yaml")
 	yaml := "watch:\n  debounce: 250ms\nbuild:\n  cmd: \"echo hi\"\n"
 	if err := os.WriteFile(path, []byte(yaml), 0o644); err != nil {
 		t.Fatal(err)
@@ -67,7 +67,7 @@ func TestLoad_ValidFile_OverridesDefaults(t *testing.T) {
 		t.Errorf("build.cmd override not applied: got %q", cfg.Build.Cmd)
 	}
 	// Untouched fields should still carry their defaults.
-	if cfg.Run.Cmd != "./tmp/whack-app" {
+	if cfg.Run.Cmd != "./tmp/xgo-app" {
 		t.Errorf("unrelated default was clobbered: run.cmd = %q", cfg.Run.Cmd)
 	}
 }

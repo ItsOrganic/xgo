@@ -1,19 +1,21 @@
 version: 2
 
+project_name: xgo
+
 before:
   hooks:
     - go mod tidy
 
 builds:
-  - id: whack
+  - id: xgo
     main: .
-    binary: whack
+    binary: xgo
     env:
       - CGO_ENABLED=0
     goos: [linux, darwin, windows]
     goarch: [amd64, arm64]
     ldflags:
-      - -s -w -X github.com/ItsOrganic/whack/cmd.Version={{.Version}}
+      - -s -w -X github.com/ItsOrganic/xgo/cmd.Version={{.Version}}
 
 archives:
   - formats: [tar.gz]
@@ -38,6 +40,6 @@ brews:
   - repository:
       owner: ItsOrganic
       name: homebrew-tap
-    homepage: https://itsorganic.github.io/whack/
+    homepage: https://itsorganic.github.io/xgo/
     description: A fast hot reloader for Go
     license: MIT

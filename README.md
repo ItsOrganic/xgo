@@ -1,6 +1,6 @@
-# whack
+# xgo
 
-[![CI](https://github.com/ItsOrganic/whack/actions/workflows/ci.yml/badge.svg)](https://github.com/ItsOrganic/whack/actions/workflows/ci.yml)
+[![CI](https://github.com/ItsOrganic/xgo/actions/workflows/ci.yml/badge.svg)](https://github.com/ItsOrganic/xgo/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Go Reference](https://img.shields.io/badge/go-1.25%2B-00ADD8)](go.mod)
 
@@ -8,7 +8,7 @@ A production-grade Go CLI hot-reloader designed as a stronger alternative to `wg
 
 ## Introduction
 
-`whack` watches your project files, coalesces noisy filesystem events, rebuilds safely, and restarts your app with minimal downtime.
+`xgo` watches your project files, coalesces noisy filesystem events, rebuilds safely, and restarts your app with minimal downtime.
 
 Core goals:
 - Fast, reliable hot-reload loops for Go development.
@@ -25,7 +25,7 @@ The implementation was built as a channel-driven pipeline with strict process li
 3. Coalesce bursts with a debouncer.
 4. Fingerprint watched files (mtime + size hash) to avoid unnecessary rebuilds.
 5. On real change: run hooks, build, and only replace old process if build succeeds.
-6. Persist runtime status to `tmp/whack-status.yaml` for `whack status`.
+6. Persist runtime status to `tmp/xgo-status.yaml` for `xgo status`.
 
 Design principles used:
 - Typed channels between watcher, debouncer, and runner.
@@ -37,14 +37,14 @@ Design principles used:
 
 ```text
                         +----------------------+
-                        |      whack run       |
+                        |      xgo run       |
                         |  (cobra command)     |
                         +----------+-----------+
                                    |
                                    v
                     +-------------------------------+
                     |      internal/config          |
-                    | load whack.yaml + merge flags |
+                    | load xgo.yaml + merge flags |
                     +---------------+---------------+
                                     |
                                     v
@@ -71,13 +71,13 @@ Design principles used:
 |                                                            | + extra commands  |
 |                                                            +-------------------+
 |
-+--> status snapshots --> tmp/whack-status.yaml --> `whack status`
++--> status snapshots --> tmp/xgo-status.yaml --> `xgo status`
 ```
 
 ## Project Structure
 
 ```text
-whack/
+xgo/
 ├── main.go
 ├── go.mod
 ├── go.sum
@@ -97,37 +97,37 @@ whack/
 │   │   └── proc_windows.go
 │   ├── config/config.go
 │   └── logger/logger.go
-└── whack.yaml.example
+└── xgo.yaml.example
 ```
 
 ## Install
 
 ```bash
-go install github.com/ItsOrganic/whack@latest
+go install github.com/ItsOrganic/xgo@latest
 ```
 
-Or download a prebuilt binary from [Releases](https://github.com/ItsOrganic/whack/releases).
+Or download a prebuilt binary from [Releases](https://github.com/ItsOrganic/xgo/releases).
 
 ### Homebrew
 
 ```bash
-brew install ItsOrganic/tap/whack
+brew install ItsOrganic/tap/xgo
 ```
 
 ### Initialize config
 
 ```bash
-whack init
+xgo init
 ```
 
-This creates `whack.yaml` in your current directory.
+This creates `xgo.yaml` in your current directory.
 
 ## Usage
 
 ### Start hot-reload
 
 ```bash
-whack run
+xgo run
 ```
 
 ### Build a specific file or package path
@@ -135,21 +135,21 @@ whack run
 Use a positional build target when your main package is not at project root:
 
 ```bash
-whack run src/main.go
+xgo run src/main.go
 ```
 
-If the first positional argument is an existing `.go` file or directory, `whack` treats it as the build target (unless `--build` is explicitly set).
+If the first positional argument is an existing `.go` file or directory, `xgo` treats it as the build target (unless `--build` is explicitly set).
 
 ### Override settings from CLI
 
 ```bash
-whack run \
+xgo run \
   --watch ./cmd --watch ./internal \
   --include "*.go" --include "*.html" \
   --exclude "*_test.go" \
   --debounce 100ms \
-  --build "go build -o ./tmp/whack-app ." \
-  --cmd "./tmp/whack-app" \
+  --build "go build -o ./tmp/xgo-app ." \
+  --cmd "./tmp/xgo-app" \
   --before "go generate ./..." \
   --after "echo restarted" \
   --extra-cmd "npm run watch" \
@@ -159,7 +159,7 @@ whack run \
 ### Show runtime status
 
 ```bash
-whack status
+xgo status
 ```
 
 Reports `RUNNING (pid=...)` or `NOT RUNNING (stale - last updated ...)` based
@@ -169,7 +169,7 @@ a status file.
 ### Diagnose a broken setup
 
 ```bash
-whack doctor
+xgo doctor
 ```
 
 Validates your config, checks that at least one directory is actually being
@@ -189,17 +189,17 @@ before you spend time wondering why saves aren't triggering rebuilds.
   build and a ~30% smaller binary — one-off micro-benchmarks on the
   maintainer's machine, not part of the reproducible suite in
   [`benchmark/`](benchmark/), so treat them as indicative. Drop the flags
-  from `build.cmd` in your own `whack.yaml` if you need to attach a debugger.
+  from `build.cmd` in your own `xgo.yaml` if you need to attach a debugger.
 - `chmod`-only changes don't trigger rebuilds — they can't affect the build,
   and `go build` itself emits them.
 
 ## Notes
 
 - `tmp/` is auto-added to `.gitignore` if missing.
-- Runtime status is stored in `tmp/whack-status.yaml`.
+- Runtime status is stored in `tmp/xgo-status.yaml`.
 - The compiled binary is left in `tmp/` on exit, on purpose. `go build -o X`
   only takes its up-to-date fast path when `X` already exists, so deleting
-  it would cost the next `whack run` a full re-link — measured at 630ms vs
+  it would cost the next `xgo run` a full re-link — measured at 630ms vs
   234ms to first ready in a one-off A/B on an older Go toolchain, not part
   of the reproducible suite in [`benchmark/`](benchmark/). On go1.25.13 the
   reproducible cold-start figure is ~62-66ms; see
@@ -208,27 +208,27 @@ before you spend time wondering why saves aren't triggering rebuilds.
 
 ## Inspiration
 
-`whack` is inspired by [`wgo` (watcher-go)](https://github.com/bokwoon95/wgo), an open-source live reload tool for Go apps and general commands.
+`xgo` is inspired by [`wgo` (watcher-go)](https://github.com/bokwoon95/wgo), an open-source live reload tool for Go apps and general commands.
 
-## whack vs wgo
+## xgo vs wgo
 
 Both tools solve hot reload, but they optimize for different workflows:
 
-| Area | whack | wgo |
+| Area | xgo | wgo |
 | --- | --- | --- |
-| Workflow style | Config-first (`whack.yaml`) plus CLI overrides | CLI-first, command-chain oriented |
+| Workflow style | Config-first (`xgo.yaml`) plus CLI overrides | CLI-first, command-chain oriented |
 | Process safety | Keeps healthy process running if rebuild fails | General-purpose rerun model |
 | Change handling | Debounce + fingerprint checks to reduce duplicate rebuilds | Event-driven reruns with filtering flags |
-| Runtime visibility | Built-in `whack status` with `tmp/whack-status.yaml` snapshots | No equivalent persisted runtime status command |
+| Runtime visibility | Built-in `xgo status` with `tmp/xgo-status.yaml` snapshots | No equivalent persisted runtime status command |
 | Hooks and side tasks | `before`/`after` hooks + `extra_cmds` in config | Chaining/parallel commands via CLI separators |
 | Defaults | Auto-excludes common noisy dirs/files; ships a 50ms debounce and a stripped build command | Minimal, generic watcher defaults |
 
-If you prefer a small, CLI-native watcher, `wgo` is excellent. If you want a structured, project-configured hot-reload loop with stronger lifecycle controls, `whack` is built for that.
+If you prefer a small, CLI-native watcher, `wgo` is excellent. If you want a structured, project-configured hot-reload loop with stronger lifecycle controls, `xgo` is built for that.
 
 ## Development
 
 ```bash
-go build -o whack .
+go build -o xgo .
 go test ./... -race
 gofmt -l .
 go vet ./...
@@ -236,7 +236,7 @@ go vet ./...
 
 ## Benchmarks
 
-whack vs `wgo` vs `air` on rebuild latency, cold-start latency, and resource
+xgo vs `wgo` vs `air` on rebuild latency, cold-start latency, and resource
 usage — see [BENCHMARKS.md](BENCHMARKS.md).
 
 ## Contributing

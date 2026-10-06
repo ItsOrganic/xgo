@@ -9,9 +9,9 @@ import (
 )
 
 // writeScript writes an executable shell script and returns its path.
-// Mirrors the fake-subprocess testing pattern used by the main whack module's
+// Mirrors the fake-subprocess testing pattern used by the main xgo module's
 // own runner tests: a tiny shell script standing in for a real tool is
-// faster and more hermetic than driving real whack/wgo/air in unit tests.
+// faster and more hermetic than driving real xgo/wgo/air in unit tests.
 func writeScript(t *testing.T, dir, name, body string) string {
 	t.Helper()
 	p := filepath.Join(dir, name)
