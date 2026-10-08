@@ -218,7 +218,7 @@ before you spend time wondering why saves aren't triggering rebuilds.
 ## xgo vs wgo
 
 Both tools solve hot reload, but they optimize for different workflows:
-
+ 
 | Area | xgo | wgo |
 | --- | --- | --- |
 | Workflow style | Config-first (`xgo.yaml`) plus CLI overrides | CLI-first, command-chain oriented |
